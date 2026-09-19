@@ -1,5 +1,5 @@
 /**
- * iCloud Personal Cloud & Smartphone Dashboard Web Client
+ * Pulse (Pulse Cloud & Pulse OS) Web Client
  * Pure JavaScript - Apple Style UI, Multi-View Portal, Text Previewer & System Monitor
  */
 
@@ -14,7 +14,7 @@
     currentFilter: 'all',
     searchQuery: '',
     sortBy: 'modified-desc',
-    viewMode: localStorage.getItem('icloud_view_mode') || 'grid',
+    viewMode: localStorage.getItem('pulse_view_mode') || localStorage.getItem('icloud_view_mode') || 'grid',
     activePreviewIndex: -1,
     previewableList: [],
     pendingDeleteFile: null,
@@ -1066,7 +1066,7 @@
 
   function applyViewMode(mode) {
     state.viewMode = mode;
-    localStorage.setItem('icloud_view_mode', mode);
+    localStorage.setItem('pulse_view_mode', mode);
 
     if (el.btnGridView) el.btnGridView.classList.toggle('active', mode === 'grid');
     if (el.btnListView) el.btnListView.classList.toggle('active', mode === 'list');
@@ -1586,7 +1586,7 @@
       bringWindowToFront(remaining[remaining.length - 1]);
     } else {
       const titleEl = document.getElementById('desktop-active-app-name');
-      if (titleEl) titleEl.textContent = '가상 데스크탑';
+      if (titleEl) titleEl.textContent = 'Pulse OS';
     }
   }
 
@@ -1611,16 +1611,16 @@
 
     const names = {
       terminal: '터미널',
-      finder: 'Finder',
+      finder: 'Pulse Cloud Finder',
       editor: '코드 에디터',
       monitor: '활동 모니터',
       browser: '웹 브라우저',
       linux: '리눅스 GUI',
       settings: '환경설정',
-      about: '이 컴퓨터에 관하여'
+      about: 'Pulse OS 정보'
     };
     const titleEl = document.getElementById('desktop-active-app-name');
-    if (titleEl) titleEl.textContent = names[appId] || '가상 데스크탑';
+    if (titleEl) titleEl.textContent = names[appId] || 'Pulse OS';
   }
 
   function makeWindowDraggable(win) {

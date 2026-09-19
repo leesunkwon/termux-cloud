@@ -48,7 +48,7 @@ if [ "$RUNNING" = false ]; then
 fi
 
 echo -e "${CYAN}======================================================${NC}"
-echo -e "${CYAN}  ☁️   iCloud Personal Server 상태 점검                ${NC}"
+echo -e "${CYAN}  ⚡   Pulse (Pulse Cloud & Pulse OS) Server 상태 점검  ${NC}"
 echo -e "${CYAN}======================================================${NC}"
 
 if [ "$RUNNING" = true ]; then

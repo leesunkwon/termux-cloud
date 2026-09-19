@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-#  ☁️  iCloud Personal Server - 서버 중지 스크립트 (stop.sh)
+#  ⚡  Pulse Server - 서버 중지 스크립트 (stop.sh)
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,7 +15,7 @@ NC='\033[0m'
 PID_FILE="$SCRIPT_DIR/.server.pid"
 STOPPED=false
 
-echo -e "${YELLOW}[*] iCloud 개인 클라우드 서버 프로세스를 정리합니다...${NC}"
+echo -e "${YELLOW}[*] Pulse 서버 프로세스를 정리합니다...${NC}"
 
 if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")

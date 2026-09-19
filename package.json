@@ -1,7 +1,7 @@
 {
-  "name": "icloud-personal-server",
-  "version": "1.0.0",
-  "description": "iCloud-style personal cloud server for Galaxy smartphone with Termux",
+  "name": "pulse-server",
+  "version": "1.4.0",
+  "description": "Pulse (Pulse Cloud & Pulse OS) personal server for Termux and smartphones",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

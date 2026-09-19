@@ -11,7 +11,7 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
-APP_VERSION = 'v1.3.0'
+APP_VERSION = 'v1.4.0'
 SERVER_START_TIME = datetime.now()
 
 # 저장 경로 설정 (환경변수로 변경 가능: 예: STORAGE_PATH=/sdcard/MyCloud)
@@ -707,7 +707,7 @@ if __name__ == '__main__':
     is_debug = os.environ.get('DEBUG', 'true').lower() in ['true', '1', 'yes']
     local_ip = get_local_ip()
     print("==================================================")
-    print(" ☁️   iCloud Personal Server Started!")
+    print(" ⚡   Pulse (Pulse Cloud & Pulse OS) Server Started!")
     print(f" 📂  저장소 경로: {STORAGE_DIR}")
     print(f" 📱  스마트폰 자체 접속 : http://localhost:{port}")
     print(f" 💻  동일 와이파이 접속 : http://{local_ip}:{port}")

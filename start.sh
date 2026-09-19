@@ -126,7 +126,7 @@ open_browser() {
 
 # 배너 출력
 echo -e "${CYAN}┌────────────────────────────────────────────────────────┐${NC}"
-echo -e "${CYAN}│${NC}  ${BOLD}☁️   iCloud-Style Galaxy Cloud Server${NC}                 ${CYAN}│${NC}"
+echo -e "${CYAN}│${NC}  ${BOLD}⚡  Pulse (Pulse Cloud & Pulse OS) Server${NC}             ${CYAN}│${NC}"
 echo -e "${CYAN}├────────────────────────────────────────────────────────┤${NC}"
 echo -e "${CYAN}│${NC}  📱 스마트폰 자체 접속 : ${GREEN}${BOLD}http://localhost:${PORT}${NC}              ${CYAN}│${NC}"
 echo -e "${CYAN}│${NC}  💻 동일 와이파이 접속 : ${GREEN}${BOLD}http://${LOCAL_IP}:${PORT}${NC}           ${CYAN}│${NC}"
