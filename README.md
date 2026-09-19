@@ -1,7 +1,7 @@
 # ⚡ Pulse — 스마트폰 개인 클라우드와 웹 데스크톱
 
 Pulse는 남는 안드로이드 스마트폰을 Termux에서 개인 서버로 사용하는 프로젝트입니다.
-현재 버전은 **v1.6.1**입니다. Python/Flask 단일 서버가 Pulse Cloud와 Pulse OS를 제공합니다.
+현재 버전은 **v1.6.2**입니다. Python/Flask 단일 서버가 Pulse Cloud와 Pulse OS를 제공합니다.
 
 ## 설치 및 최초 로그인
 

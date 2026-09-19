@@ -92,9 +92,7 @@ body {
 .pulse-sidebar-icon {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
-  object-fit: cover;
-  box-shadow: 0 3px 8px rgba(0, 113, 227, 0.25);
+  object-fit: contain;
   display: block;
 }
 
@@ -1852,9 +1850,7 @@ body {
 .pulse-nav-icon {
   width: 26px;
   height: 26px;
-  border-radius: 7px;
-  object-fit: cover;
-  box-shadow: 0 2px 6px rgba(0, 113, 227, 0.25);
+  object-fit: contain;
   display: block;
 }
 
@@ -1975,26 +1971,7 @@ body {
 .portal-pulse-hero-img {
   width: 92px;
   height: 92px;
-  border-radius: 22px;
-  object-fit: cover;
-  box-shadow: 0 16px 36px rgba(0, 113, 227, 0.22), 0 4px 12px rgba(0, 0, 0, 0.08);
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
-  animation: pulseHeroFloat 4s ease-in-out infinite;
-}
-
-@keyframes pulseHeroFloat {
-  0%, 100% {
-    transform: translateY(0px) scale(1);
-    box-shadow: 0 16px 36px rgba(0, 113, 227, 0.22), 0 4px 12px rgba(0, 0, 0, 0.08);
-  }
-  50% {
-    transform: translateY(-6px) scale(1.02);
-    box-shadow: 0 22px 42px rgba(88, 86, 214, 0.3), 0 6px 16px rgba(0, 0, 0, 0.1);
-  }
-}
-
-.portal-pulse-hero-img:hover {
-  transform: translateY(-8px) scale(1.06);
+  object-fit: contain;
 }
 
 .portal-badge {
@@ -2890,8 +2867,7 @@ body {
 .menubar-pulse-icon {
   width: 18px;
   height: 18px;
-  border-radius: 4px;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 
@@ -3820,9 +3796,7 @@ body {
 .about-pulse-logo {
   width: 72px;
   height: 72px;
-  border-radius: 18px;
-  object-fit: cover;
-  box-shadow: 0 10px 24px rgba(0, 113, 227, 0.25);
+  object-fit: contain;
   display: block;
 }
 
