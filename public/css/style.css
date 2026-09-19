@@ -1801,8 +1801,8 @@ body {
 
 .portal-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 28px;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+  gap: 24px;
 }
 
 .portal-card {
@@ -1846,6 +1846,7 @@ body {
 
 .glow-blue { background-color: #0071e3; }
 .glow-orange { background-color: #ff9500; }
+.glow-purple { background-color: #af52de; }
 
 .portal-card-header {
   display: flex;
@@ -1874,6 +1875,17 @@ body {
   height: 32px;
 }
 
+.icon-desktop {
+  background: linear-gradient(135deg, #af52de, #5856d6);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(175, 82, 222, 0.35);
+}
+
+.icon-desktop svg {
+  width: 30px;
+  height: 30px;
+}
+
 .icon-dashboard {
   background: linear-gradient(135deg, #ff9500, #ffba52);
   color: #ffffff;
@@ -1897,6 +1909,15 @@ body {
 .portal-tag.green {
   background-color: rgba(52, 199, 89, 0.1);
   color: #248a3d;
+}
+
+.portal-tag.purple {
+  background-color: rgba(175, 82, 222, 0.12);
+  color: #af52de;
+}
+
+.pill-dot.purple {
+  background-color: #af52de;
 }
 
 .portal-card-body {
@@ -2550,5 +2571,1143 @@ body {
   display: flex;
   justify-content: flex-end;
   background-color: #fbfbfd;
+}
+
+/* ========================================================================== */
+/* 🖥️ 가상 데스크탑 GUI (Cloud Desktop Web OS) 전용 스타일                       */
+/* ========================================================================== */
+#view-desktop {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 54px);
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+}
+
+.desktop-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+  transition: background 0.5s ease;
+}
+
+/* 데스크탑 배경화면 테마들 */
+.theme-sonoma {
+  background: radial-gradient(circle at 10% 20%, rgba(255, 110, 80, 0.8) 0%, transparent 40%),
+              radial-gradient(circle at 90% 80%, rgba(100, 50, 220, 0.7) 0%, transparent 50%),
+              radial-gradient(circle at 50% 50%, rgba(0, 113, 227, 0.6) 0%, transparent 60%),
+              linear-gradient(135deg, #1e2640 0%, #0d1222 100%);
+}
+
+.theme-sequoia {
+  background: radial-gradient(circle at 20% 30%, rgba(40, 120, 90, 0.7) 0%, transparent 45%),
+              radial-gradient(circle at 80% 70%, rgba(20, 60, 50, 0.8) 0%, transparent 55%),
+              linear-gradient(135deg, #0b1e16 0%, #050d09 100%);
+}
+
+.theme-cyber {
+  background: radial-gradient(circle at 75% 20%, rgba(255, 0, 128, 0.6) 0%, transparent 40%),
+              radial-gradient(circle at 25% 80%, rgba(0, 240, 255, 0.5) 0%, transparent 45%),
+              linear-gradient(135deg, #140b29 0%, #080410 100%);
+}
+
+.theme-midnight {
+  background: radial-gradient(circle at 50% 30%, rgba(50, 70, 140, 0.4) 0%, transparent 60%),
+              linear-gradient(180deg, #090b14 0%, #020306 100%);
+}
+
+/* 1. 상단 macOS 스타일 글로벌 메뉴바 */
+.desktop-menubar {
+  height: 32px;
+  min-height: 32px;
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.08);
+  color: #1d1d1f;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 990;
+}
+
+.menubar-left, .menubar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.menubar-apple-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  color: #1d1d1f;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.menubar-apple-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.menubar-app-title {
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.menubar-menus {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.menubar-item {
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.menubar-item:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.menubar-status-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.menubar-clock {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.menubar-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  color: #1d1d1f;
+  border-radius: 4px;
+}
+
+.menubar-icon-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* 2. 데스크탑 캔버스 (바탕화면) */
+.desktop-canvas {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 바탕화면 아이콘 그리드 */
+.desktop-icons-grid {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 14px;
+  height: calc(100% - 100px);
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.desktop-shortcut {
+  width: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  padding: 6px 4px;
+  border-radius: 8px;
+  transition: background 0.15s;
+  outline: none;
+}
+
+.desktop-shortcut:hover, .desktop-shortcut:focus {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.shortcut-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.desktop-shortcut:hover .shortcut-icon {
+  transform: scale(1.05);
+}
+
+.shortcut-name {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #ffffff;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.6);
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+/* 아이콘 배경 스타일 */
+.icon-bg-black { background: linear-gradient(135deg, #24283b, #1a1b26); color: #ffffff; }
+.icon-bg-blue { background: linear-gradient(135deg, #0071e3, #47a3ff); color: #ffffff; }
+.icon-bg-orange { background: linear-gradient(135deg, #ff9500, #ffba52); color: #ffffff; }
+.icon-bg-green { background: linear-gradient(135deg, #34c759, #30d158); color: #ffffff; }
+.icon-bg-cyan { background: linear-gradient(135deg, #32ade6, #64d2ff); color: #ffffff; }
+.icon-bg-purple { background: linear-gradient(135deg, #af52de, #5856d6); color: #ffffff; }
+.icon-bg-gray { background: linear-gradient(135deg, #8e8e93, #636366); color: #ffffff; }
+
+/* 3. 윈도우 창 시스템 */
+.desktop-window {
+  position: absolute;
+  min-width: 320px;
+  min-height: 220px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.4);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 20;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, width 0.2s, height 0.2s;
+}
+
+.desktop-window.window-dark {
+  background: rgba(26, 27, 38, 0.92);
+  color: #c0caf5;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.desktop-window.window-maximized {
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: calc(100% - 76px) !important;
+  border-radius: 0 !important;
+}
+
+.desktop-window.window-minimized {
+  opacity: 0;
+  transform: scale(0.6) translateY(200px);
+  pointer-events: none;
+}
+
+/* 윈도우 헤더 (타이틀 바) */
+.window-header {
+  height: 38px;
+  min-height: 38px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  cursor: grab;
+  user-select: none;
+}
+
+.desktop-window.window-dark .window-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.window-header:active {
+  cursor: grabbing;
+}
+
+/* 신호등 버튼 */
+.window-traffic-lights {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 60px;
+}
+
+.traffic-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+  transition: transform 0.1s;
+}
+
+.traffic-light:hover {
+  transform: scale(1.15);
+}
+
+.traffic-light.btn-close { background: #ff5f56; border: 0.5px solid #e0443e; }
+.traffic-light.btn-min { background: #ffbd2e; border: 0.5px solid #dea123; }
+.traffic-light.btn-max { background: #27c93f; border: 0.5px solid #1aab29; }
+
+.window-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  pointer-events: none;
+}
+
+.desktop-window.window-dark .window-title {
+  color: #c0caf5;
+}
+
+.window-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 60px;
+  justify-content: flex-end;
+}
+
+.win-btn-sm {
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.desktop-window.window-dark .win-btn-sm {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.1);
+  color: #c0caf5;
+}
+
+.win-btn-sm:hover {
+  background: rgba(0, 113, 227, 0.15);
+}
+
+.btn-primary-sm {
+  background: var(--apple-blue) !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+/* 윈도우 본체 공통 */
+.window-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.window-statusbar {
+  height: 24px;
+  min-height: 24px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.desktop-window.window-dark .window-statusbar {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.25);
+  color: #7aa2f7;
+}
+
+/* 윈도우 리사이즈 핸들 */
+.window-resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  z-index: 100;
+}
+
+/* [앱 1: 터미널] */
+.terminal-body {
+  background: #16161e;
+}
+
+.terminal-presets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #1a1b26;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  overflow-x: auto;
+}
+
+.preset-label {
+  font-size: 11px;
+  color: #565f89;
+  white-space: nowrap;
+}
+
+.preset-cmd-btn {
+  font-size: 11px;
+  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  background: #24283b;
+  color: #7aa2f7;
+  border: 1px solid rgba(122, 162, 247, 0.3);
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.preset-cmd-btn:hover {
+  background: #7aa2f7;
+  color: #1a1b26;
+}
+
+.terminal-output {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #c0caf5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}
+
+.term-line { margin-bottom: 3px; }
+.term-welcome { color: #bb9af7; font-size: 11px; line-height: 1.2; }
+.term-info { color: #7dcfff; font-weight: 600; }
+.term-muted { color: #565f89; }
+.term-cmd { color: #7aa2f7; font-weight: 600; }
+.term-err { color: #f7768e; }
+.term-success { color: #9ece6a; }
+
+.terminal-input-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: #1a1b26;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 8px;
+}
+
+.terminal-prompt {
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  color: #73daca;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.terminal-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #c0caf5;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 13px;
+  outline: none;
+}
+
+.terminal-send-btn {
+  font-size: 11.5px;
+  background: #7aa2f7;
+  color: #1a1b26;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* [앱 2: 파일 탐색기 Finder] */
+.finder-body {
+  flex-direction: row;
+  background: #ffffff;
+}
+
+.finder-sidebar {
+  width: 140px;
+  min-width: 140px;
+  background: #f5f5f7;
+  border-right: 1px solid var(--border-light);
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.finder-nav-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  padding: 4px 8px;
+  text-transform: uppercase;
+}
+
+.finder-nav-item {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-main);
+  transition: background 0.15s;
+}
+
+.finder-nav-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.finder-nav-item.active {
+  background: rgba(0, 113, 227, 0.12);
+  color: var(--apple-blue);
+  font-weight: 600;
+}
+
+.finder-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.finder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
+  gap: 12px;
+}
+
+.finder-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.finder-item:hover {
+  background: rgba(0, 113, 227, 0.08);
+}
+
+.finder-item-icon {
+  font-size: 32px;
+}
+
+.finder-item-name {
+  font-size: 11px;
+  text-align: center;
+  color: var(--text-main);
+  word-break: break-all;
+  line-height: 1.2;
+  max-height: 2.4em;
+  overflow: hidden;
+}
+
+/* [앱 3: 코드 & 텍스트 에디터] */
+.editor-body {
+  background: #1e1e2e;
+}
+
+.editor-toolbar {
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #181825;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.editor-filename-input {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: #cdd6f4;
+  font-size: 12px;
+  font-family: monospace;
+  outline: none;
+  width: 220px;
+}
+
+.editor-tools-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #a6adc8;
+}
+
+.editor-badge.green {
+  background: rgba(52, 199, 89, 0.2);
+  color: #a6e3a1;
+}
+
+.editor-container {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+.editor-gutter {
+  width: 42px;
+  background: #11111b;
+  color: #6c7086;
+  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 10px 4px;
+  text-align: right;
+  user-select: none;
+  overflow: hidden;
+}
+
+.editor-textarea {
+  flex: 1;
+  background: #1e1e2e;
+  border: none;
+  color: #cdd6f4;
+  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 10px;
+  outline: none;
+  resize: none;
+  tab-size: 4;
+  white-space: pre;
+  overflow-x: auto;
+  user-select: text;
+}
+
+/* [앱 4: 활동 모니터] */
+.monitor-body {
+  padding: 16px;
+  background: #fbfbfd;
+  gap: 16px;
+}
+
+.monitor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.monitor-card {
+  background: #ffffff;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.monitor-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.monitor-card-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.monitor-card-val {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.monitor-progress-track {
+  width: 100%;
+  height: 6px;
+  background: #f0f0f5;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.monitor-progress-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.monitor-progress-bar.blue { background: #0071e3; }
+.monitor-progress-bar.purple { background: #af52de; }
+.monitor-progress-bar.green { background: #34c759; }
+.monitor-progress-bar.orange { background: #ff9500; }
+
+.monitor-subtext {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.monitor-info-strip {
+  display: flex;
+  justify-content: space-around;
+  padding: 10px;
+  background: #ffffff;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  font-size: 11.5px;
+}
+
+.mon-info-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.mon-info-key { color: var(--text-tertiary); }
+.mon-info-val { font-weight: 600; color: var(--text-main); }
+
+/* [앱 5: 웹 브라우저] */
+.browser-body {
+  background: #f5f5f7;
+}
+
+.browser-address-bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.browser-url-input {
+  flex: 1;
+  background: #f5f5f7;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  outline: none;
+}
+
+.browser-go-btn {
+  padding: 6px 12px;
+  background: var(--apple-blue);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.browser-frame-wrap {
+  flex: 1;
+  position: relative;
+}
+
+.browser-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #ffffff;
+}
+
+/* [앱 6: 리눅스 GUI (X11 / noVNC)] */
+.vnc-body {
+  background: #1e1e24;
+}
+
+.vnc-active-view, .vnc-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.vnc-setup-view {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.vnc-guide-card {
+  background: #2b2b36;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 28px 24px;
+  max-width: 580px;
+  color: #f5f5f7;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.vnc-guide-badge {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #bb9af7;
+  background: rgba(187, 154, 247, 0.15);
+  padding: 4px 10px;
+  border-radius: 20px;
+  align-self: flex-start;
+}
+
+.vnc-guide-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.vnc-guide-desc {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #a9b1d6;
+}
+
+.vnc-guide-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.guide-step-item {
+  display: flex;
+  gap: 12px;
+}
+
+.step-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--apple-blue);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.step-detail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.code-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #1a1b26;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.code-box code {
+  font-family: monospace;
+  color: #73daca;
+  font-size: 12.5px;
+}
+
+.copy-cmd-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #c0caf5;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.copy-cmd-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.step-hint {
+  font-size: 11.5px;
+  color: #7aa2f7;
+}
+
+.guide-action-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* [앱 7: 설정] */
+.settings-body {
+  padding: 20px;
+  background: #fbfbfd;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+
+.settings-section h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.wallpaper-selector {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.wp-option {
+  background: #ffffff;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.wp-option.active {
+  border-color: var(--apple-blue);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.2);
+}
+
+.wp-preview {
+  width: 100%;
+  height: 54px;
+  border-radius: 6px;
+}
+
+.wp-sonoma { background: linear-gradient(135deg, #1e2640, #ff7e5f); }
+.wp-sequoia { background: linear-gradient(135deg, #0b1e16, #28785a); }
+.wp-cyber { background: linear-gradient(135deg, #140b29, #ff0080); }
+.wp-midnight { background: linear-gradient(180deg, #090b14, #32468c); }
+
+.wp-option span {
+  font-size: 11.5px;
+  color: var(--text-main);
+  font-weight: 500;
+}
+
+.settings-info-list {
+  background: #ffffff;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+/* [앱 8: 이 컴퓨터에 관하여] */
+.about-body {
+  padding: 30px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: #ffffff;
+  gap: 12px;
+}
+
+.about-mac-icon {
+  color: var(--text-main);
+}
+
+.about-title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.about-version {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.about-specs {
+  width: 100%;
+  margin-top: 12px;
+  border-top: 1px solid var(--border-light);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.about-spec-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.spec-label { color: var(--text-tertiary); }
+.spec-value { font-weight: 500; color: var(--text-main); }
+
+/* 4. 하단 macOS 플로팅 독 (Dock) */
+.desktop-dock-wrap {
+  position: absolute;
+  bottom: 12px;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 950;
+}
+
+.desktop-dock {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.38);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s;
+}
+
+.dock-item {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: none;
+  background: rgba(255, 255, 255, 0.65);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background 0.15s;
+}
+
+.dock-item:hover {
+  transform: scale(1.2) translateY(-8px);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.dock-icon {
+  font-size: 24px;
+}
+
+.dock-label {
+  display: none; /* 필요시 툴팁 구현 */
+}
+
+.dock-dot {
+  position: absolute;
+  bottom: -4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #1d1d1f;
+}
+
+.dock-divider {
+  width: 1px;
+  height: 32px;
+  background: rgba(0, 0, 0, 0.15);
+  margin: 0 4px;
+}
+
+/* 모바일 데스크탑 최적화 미디어 쿼리 */
+@media (max-width: 768px) {
+  .desktop-menubar .menubar-menus {
+    display: none;
+  }
+  .desktop-menubar #menubar-ip-badge {
+    display: none;
+  }
+  .desktop-dock {
+    gap: 4px;
+    padding: 6px 10px;
+    border-radius: 18px;
+  }
+  .dock-item {
+    width: 40px;
+    height: 40px;
+  }
+  .dock-icon {
+    font-size: 20px;
+  }
+  .desktop-window {
+    width: 95% !important;
+    left: 2.5% !important;
+    max-height: 80% !important;
+  }
+  .wallpaper-selector {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 

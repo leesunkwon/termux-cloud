@@ -8,7 +8,7 @@
 
   // State Management
   const state = {
-    currentAppView: 'portal', // 'portal' | 'cloud' | 'dashboard'
+    currentAppView: 'portal', // 'portal' | 'cloud' | 'desktop' | 'dashboard'
     files: [],
     filteredFiles: [],
     currentFilter: 'all',
@@ -25,6 +25,16 @@
     dashboardData: null,
     changelogData: null,
     activePreviewText: '',
+    // Virtual Desktop State
+    desktopTheme: localStorage.getItem('desktop_theme') || 'sonoma',
+    terminalCwd: '~',
+    terminalHistory: [],
+    terminalHistoryIdx: -1,
+    activeDesktopApp: 'terminal',
+    openWindows: {},
+    topZIndex: 100,
+    editorCurrentFile: '',
+    finderFilter: 'all',
   };
 
   // DOM Elements
@@ -33,9 +43,11 @@
     navBrandBtn: document.getElementById('nav-brand-btn'),
     tabPortal: document.getElementById('tab-portal'),
     tabCloud: document.getElementById('tab-cloud'),
+    tabDesktop: document.getElementById('tab-desktop'),
     tabDashboard: document.getElementById('tab-dashboard'),
     viewPortal: document.getElementById('view-portal'),
     viewCloud: document.getElementById('view-cloud'),
+    viewDesktop: document.getElementById('view-desktop'),
     viewDashboard: document.getElementById('view-dashboard'),
     navStatusChip: document.getElementById('nav-status-chip'),
     serverUpdateBtn: document.getElementById('server-update-btn'),
@@ -54,6 +66,7 @@
 
     // Portal View Elements
     portalCardCloud: document.getElementById('portal-card-cloud'),
+    portalCardDesktop: document.getElementById('portal-card-desktop'),
     portalCardDashboard: document.getElementById('portal-card-dashboard'),
     portalFilesSummary: document.getElementById('portal-files-summary'),
     portalUptimeSummary: document.getElementById('portal-uptime-summary'),
@@ -179,10 +192,11 @@
     setupEventListeners();
     setupDropZone();
     applyViewMode(state.viewMode);
+    setupDesktopEnvironment();
 
     // Initial Hash Routing or Default to Portal
     const hash = window.location.hash.replace('#', '');
-    if (['portal', 'cloud', 'dashboard'].includes(hash)) {
+    if (['portal', 'cloud', 'desktop', 'dashboard'].includes(hash)) {
       switchAppView(hash);
     } else {
       switchAppView('portal');
@@ -201,39 +215,49 @@
     setInterval(() => {
       if (state.currentAppView === 'dashboard') {
         fetchDashboardData(true);
+      } else if (state.currentAppView === 'desktop' && state.openWindows['monitor']) {
+        fetchDashboardData(true);
+        updateMonitorWidget();
       }
     }, 8000);
 
     window.addEventListener('focus', () => {
       checkServerUpdate(false);
       if (state.currentAppView === 'dashboard') fetchDashboardData(true);
+      if (state.currentAppView === 'desktop') {
+        fetchDashboardData(true);
+        updateMonitorWidget();
+      }
     });
 
     window.addEventListener('hashchange', () => {
       const h = window.location.hash.replace('#', '');
-      if (['portal', 'cloud', 'dashboard'].includes(h) && h !== state.currentAppView) {
+      if (['portal', 'cloud', 'desktop', 'dashboard'].includes(h) && h !== state.currentAppView) {
         switchAppView(h);
       }
     });
   }
 
-  // ================= View Switcher (Portal / Cloud / Dashboard) =================
+  // ================= View Switcher (Portal / Cloud / Desktop / Dashboard) =================
   function switchAppView(viewName) {
     state.currentAppView = viewName;
     window.location.hash = viewName;
 
     // Update Nav Tab Buttons
-    [el.tabPortal, el.tabCloud, el.tabDashboard].forEach(btn => {
+    [el.tabPortal, el.tabCloud, el.tabDesktop, el.tabDashboard].forEach(btn => {
       if (btn) btn.classList.toggle('active', btn.getAttribute('data-view') === viewName);
     });
 
     // Toggle View Sections
     if (el.viewPortal) el.viewPortal.classList.toggle('hidden', viewName !== 'portal');
     if (el.viewCloud) el.viewCloud.classList.toggle('hidden', viewName !== 'cloud');
+    if (el.viewDesktop) el.viewDesktop.classList.toggle('hidden', viewName !== 'desktop');
     if (el.viewDashboard) el.viewDashboard.classList.toggle('hidden', viewName !== 'dashboard');
 
     if (viewName === 'cloud') {
       render();
+    } else if (viewName === 'desktop') {
+      initDesktopView();
     } else if (viewName === 'dashboard') {
       fetchDashboardData();
       fetchChangelog();
@@ -265,11 +289,15 @@
     // Nav Tabs
     if (el.tabPortal) el.tabPortal.addEventListener('click', () => switchAppView('portal'));
     if (el.tabCloud) el.tabCloud.addEventListener('click', () => switchAppView('cloud'));
+    if (el.tabDesktop) el.tabDesktop.addEventListener('click', () => switchAppView('desktop'));
     if (el.tabDashboard) el.tabDashboard.addEventListener('click', () => switchAppView('dashboard'));
 
     // Portal Cards
     if (el.portalCardCloud) {
       el.portalCardCloud.addEventListener('click', () => switchAppView('cloud'));
+    }
+    if (el.portalCardDesktop) {
+      el.portalCardDesktop.addEventListener('click', () => switchAppView('desktop'));
     }
     if (el.portalCardDashboard) {
       el.portalCardDashboard.addEventListener('click', () => switchAppView('dashboard'));
@@ -1295,6 +1323,846 @@
         uploadFiles(e.dataTransfer.files);
       }
     });
+  }
+
+  // ==========================================================================
+  // 🖥️ 가상 데스크탑 GUI (Cloud Desktop OS) 환경 구현
+  // ==========================================================================
+  let desktopClockTimer = null;
+  let desktopInitialized = false;
+
+  function setupDesktopEnvironment() {
+    if (desktopInitialized) return;
+    desktopInitialized = true;
+
+    setupDesktopWindowControls();
+    setupTerminalLogic();
+    setupFinderLogic();
+    setupEditorLogic();
+    setupBrowserLogic();
+    setupLinuxVncLogic();
+    setupWallpaperTheme();
+
+    // Start Desktop Clock
+    updateDesktopClock();
+    if (!desktopClockTimer) {
+      desktopClockTimer = setInterval(updateDesktopClock, 1000);
+    }
+  }
+
+  function initDesktopView() {
+    setupDesktopEnvironment();
+    updateDesktopClock();
+    updateMenubarIndicators();
+
+    // If no windows open, open Terminal by default
+    if (Object.keys(state.openWindows).length === 0) {
+      openDesktopWindow('terminal');
+    }
+  }
+
+  function updateDesktopClock() {
+    const clockEl = document.getElementById('desktop-clock');
+    if (!clockEl) return;
+    const now = new Date();
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    const month = now.getMonth() + 1;
+    const date = now.getDate();
+    const day = days[now.getDay()];
+    const hours = String(now.getHours()).padStart(2, '0');
+    const mins = String(now.getMinutes()).padStart(2, '0');
+    clockEl.innerHTML = `<span>${month}월 ${date}일 (${day}) ${hours}:${mins}</span>`;
+  }
+
+  function updateMenubarIndicators() {
+    const ipText = document.getElementById('menubar-ip-text');
+    const batPct = document.getElementById('menubar-battery-pct');
+    if (state.dashboardData) {
+      if (ipText && state.dashboardData.network) {
+        ipText.textContent = state.dashboardData.network.localIp;
+      }
+      if (batPct && state.dashboardData.battery && state.dashboardData.battery.percentage !== null) {
+        batPct.textContent = `${state.dashboardData.battery.percentage}%`;
+      }
+      const aboutMem = document.getElementById('about-mem-name');
+      if (aboutMem && state.dashboardData.memory) {
+        aboutMem.textContent = state.dashboardData.memory.totalFormatted;
+      }
+    }
+  }
+
+  // Window Management
+  function setupDesktopWindowControls() {
+    // Desktop shortcut icons
+    document.querySelectorAll('.desktop-shortcut').forEach(sc => {
+      const appId = sc.getAttribute('data-app');
+      sc.addEventListener('click', () => openDesktopWindow(appId));
+      sc.addEventListener('dblclick', () => openDesktopWindow(appId));
+      sc.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') openDesktopWindow(appId);
+      });
+    });
+
+    // Dock icons
+    document.querySelectorAll('.dock-item').forEach(btn => {
+      const appId = btn.getAttribute('data-app');
+      btn.addEventListener('click', () => {
+        const win = document.getElementById('win-' + appId);
+        if (!win) return;
+        if (win.classList.contains('hidden')) {
+          openDesktopWindow(appId);
+        } else if (win.classList.contains('window-minimized')) {
+          win.classList.remove('window-minimized');
+          bringWindowToFront(appId);
+        } else if (state.activeDesktopApp === appId) {
+          // If already front, toggle minimize
+          minimizeDesktopWindow(appId);
+        } else {
+          bringWindowToFront(appId);
+        }
+      });
+    });
+
+    // Menubar App Dropdown / Actions
+    const appleBtn = document.getElementById('btn-desktop-apple');
+    if (appleBtn) {
+      appleBtn.addEventListener('click', () => openDesktopWindow('about'));
+    }
+
+    const fsBtn = document.getElementById('btn-desktop-fullscreen');
+    if (fsBtn) {
+      fsBtn.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      });
+    }
+
+    document.querySelectorAll('.menubar-menus .menubar-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const act = item.getAttribute('data-action');
+        if (act === 'open-finder') openDesktopWindow('finder');
+        else if (act === 'open-terminal') openDesktopWindow('terminal');
+        else if (act === 'open-editor') openDesktopWindow('editor');
+        else if (act === 'open-monitor') openDesktopWindow('monitor');
+      });
+    });
+
+    // Traffic light buttons
+    document.querySelectorAll('.traffic-light.btn-close').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeDesktopWindow(btn.getAttribute('data-app'));
+      });
+    });
+    document.querySelectorAll('.traffic-light.btn-min').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        minimizeDesktopWindow(btn.getAttribute('data-app'));
+      });
+    });
+    document.querySelectorAll('.traffic-light.btn-max').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        maximizeDesktopWindow(btn.getAttribute('data-app'));
+      });
+    });
+
+    // Windows dragging and resizing
+    document.querySelectorAll('.desktop-window').forEach(win => {
+      const appId = win.getAttribute('data-app');
+      win.addEventListener('mousedown', () => bringWindowToFront(appId));
+      win.addEventListener('touchstart', () => bringWindowToFront(appId), { passive: true });
+      makeWindowDraggable(win);
+      makeWindowResizable(win);
+    });
+  }
+
+  function openDesktopWindow(appId) {
+    const win = document.getElementById('win-' + appId);
+    if (!win) return;
+    win.classList.remove('hidden');
+    win.classList.remove('window-minimized');
+    bringWindowToFront(appId);
+
+    // Update Dock Dot
+    const dot = document.querySelector(`.dock-dot[data-app-dot="${appId}"]`);
+    if (dot) dot.classList.remove('hidden');
+
+    // Default sizing and cascading positioning
+    if (!win.dataset.positioned) {
+      const screenW = window.innerWidth;
+      const screenH = window.innerHeight;
+      if (screenW <= 768) {
+        win.style.top = '38px';
+        win.style.left = '2.5%';
+        win.style.width = '95%';
+        win.style.height = `${screenH - 120}px`;
+      } else {
+        const count = Object.keys(state.openWindows).length;
+        const offset = (count % 6) * 24;
+        win.style.top = `${60 + offset}px`;
+        win.style.left = `${90 + offset}px`;
+        if (appId === 'terminal') { win.style.width = '640px'; win.style.height = '420px'; }
+        else if (appId === 'finder') { win.style.width = '680px'; win.style.height = '440px'; }
+        else if (appId === 'editor') { win.style.width = '700px'; win.style.height = '460px'; }
+        else if (appId === 'monitor') { win.style.width = '560px'; win.style.height = '400px'; }
+        else if (appId === 'browser') { win.style.width = '720px'; win.style.height = '480px'; }
+        else if (appId === 'linux') { win.style.width = '720px'; win.style.height = '480px'; }
+        else if (appId === 'settings') { win.style.width = '520px'; win.style.height = '380px'; }
+        else if (appId === 'about') { win.style.width = '380px'; win.style.height = '340px'; }
+      }
+      win.dataset.positioned = 'true';
+    }
+
+    state.openWindows[appId] = true;
+
+    // Trigger app initializations
+    if (appId === 'terminal') {
+      setTimeout(() => {
+        const inp = document.getElementById('terminal-input');
+        if (inp) inp.focus();
+      }, 100);
+    } else if (appId === 'finder') {
+      renderFinderFiles();
+    } else if (appId === 'monitor') {
+      updateMonitorWidget();
+    } else if (appId === 'linux') {
+      checkVncStatus();
+    }
+  }
+
+  function closeDesktopWindow(appId) {
+    const win = document.getElementById('win-' + appId);
+    if (!win) return;
+    win.classList.add('hidden');
+    win.classList.remove('window-maximized');
+    win.classList.remove('window-minimized');
+    delete state.openWindows[appId];
+
+    const dot = document.querySelector(`.dock-dot[data-app-dot="${appId}"]`);
+    if (dot) dot.classList.add('hidden');
+
+    const remaining = Object.keys(state.openWindows);
+    if (remaining.length > 0) {
+      bringWindowToFront(remaining[remaining.length - 1]);
+    } else {
+      const titleEl = document.getElementById('desktop-active-app-name');
+      if (titleEl) titleEl.textContent = '가상 데스크탑';
+    }
+  }
+
+  function minimizeDesktopWindow(appId) {
+    const win = document.getElementById('win-' + appId);
+    if (!win) return;
+    win.classList.add('window-minimized');
+  }
+
+  function maximizeDesktopWindow(appId) {
+    const win = document.getElementById('win-' + appId);
+    if (!win) return;
+    win.classList.toggle('window-maximized');
+  }
+
+  function bringWindowToFront(appId) {
+    const win = document.getElementById('win-' + appId);
+    if (!win) return;
+    state.topZIndex++;
+    win.style.zIndex = state.topZIndex;
+    state.activeDesktopApp = appId;
+
+    const names = {
+      terminal: '터미널',
+      finder: 'Finder',
+      editor: '코드 에디터',
+      monitor: '활동 모니터',
+      browser: '웹 브라우저',
+      linux: '리눅스 GUI',
+      settings: '환경설정',
+      about: '이 컴퓨터에 관하여'
+    };
+    const titleEl = document.getElementById('desktop-active-app-name');
+    if (titleEl) titleEl.textContent = names[appId] || '가상 데스크탑';
+  }
+
+  function makeWindowDraggable(win) {
+    const header = win.querySelector('.window-header');
+    if (!header) return;
+
+    let isDragging = false;
+    let startX = 0, startY = 0;
+    let initialLeft = 0, initialTop = 0;
+
+    function onStart(clientX, clientY) {
+      if (win.classList.contains('window-maximized')) return;
+      isDragging = true;
+      bringWindowToFront(win.getAttribute('data-app'));
+      startX = clientX;
+      startY = clientY;
+      const rect = win.getBoundingClientRect();
+      const canvas = document.getElementById('desktop-canvas');
+      if (!canvas) return;
+      const canvasRect = canvas.getBoundingClientRect();
+      initialLeft = rect.left - canvasRect.left;
+      initialTop = rect.top - canvasRect.top;
+    }
+
+    function onMove(clientX, clientY) {
+      if (!isDragging) return;
+      const dx = clientX - startX;
+      const dy = clientY - startY;
+      const canvas = document.getElementById('desktop-canvas');
+      if (!canvas) return;
+      const maxLeft = canvas.clientWidth - 80;
+      const maxTop = canvas.clientHeight - 80;
+
+      const newLeft = Math.max(0, Math.min(initialLeft + dx, maxLeft));
+      const newTop = Math.max(0, Math.min(initialTop + dy, maxTop));
+      win.style.left = `${newLeft}px`;
+      win.style.top = `${newTop}px`;
+    }
+
+    function onEnd() {
+      isDragging = false;
+    }
+
+    header.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.traffic-light') || e.target.closest('.win-btn-sm')) return;
+      onStart(e.clientX, e.clientY);
+      const moveHandler = (ev) => onMove(ev.clientX, ev.clientY);
+      const upHandler = () => {
+        onEnd();
+        document.removeEventListener('mousemove', moveHandler);
+        document.removeEventListener('mouseup', upHandler);
+      };
+      document.addEventListener('mousemove', moveHandler);
+      document.addEventListener('mouseup', upHandler);
+    });
+
+    header.addEventListener('touchstart', (e) => {
+      if (e.target.closest('.traffic-light') || e.target.closest('.win-btn-sm')) return;
+      if (e.touches.length === 1) {
+        onStart(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: true });
+
+    header.addEventListener('touchmove', (e) => {
+      if (isDragging && e.touches.length === 1) {
+        onMove(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: true });
+
+    header.addEventListener('touchend', onEnd);
+  }
+
+  function makeWindowResizable(win) {
+    const handle = win.querySelector('.window-resize-handle');
+    if (!handle) return;
+
+    let isResizing = false;
+    let startX = 0, startY = 0;
+    let startW = 0, startH = 0;
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      isResizing = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startW = win.offsetWidth;
+      startH = win.offsetHeight;
+      bringWindowToFront(win.getAttribute('data-app'));
+
+      const onMouseMove = (ev) => {
+        if (!isResizing) return;
+        const newW = Math.max(300, startW + (ev.clientX - startX));
+        const newH = Math.max(200, startH + (ev.clientY - startY));
+        win.style.width = `${newW}px`;
+        win.style.height = `${newH}px`;
+      };
+
+      const onMouseUp = () => {
+        isResizing = false;
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+  }
+
+  // [App 1: Terminal]
+  function setupTerminalLogic() {
+    const form = document.getElementById('terminal-form');
+    const input = document.getElementById('terminal-input');
+    const output = document.getElementById('terminal-output');
+    const promptEl = document.getElementById('terminal-prompt');
+    const clearBtn = document.getElementById('btn-term-clear');
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        output.innerHTML = '';
+      });
+    }
+
+    document.querySelectorAll('.preset-cmd-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cmd = btn.getAttribute('data-cmd');
+        if (cmd) executeCommand(cmd);
+      });
+    });
+
+    if (form && input) {
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const cmd = input.value.trim();
+        if (!cmd) return;
+        input.value = '';
+        executeCommand(cmd);
+      });
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowUp') {
+          if (state.terminalHistoryIdx < state.terminalHistory.length - 1) {
+            state.terminalHistoryIdx++;
+            input.value = state.terminalHistory[state.terminalHistory.length - 1 - state.terminalHistoryIdx];
+          }
+          e.preventDefault();
+        } else if (e.key === 'ArrowDown') {
+          if (state.terminalHistoryIdx > 0) {
+            state.terminalHistoryIdx--;
+            input.value = state.terminalHistory[state.terminalHistory.length - 1 - state.terminalHistoryIdx];
+          } else if (state.terminalHistoryIdx === 0) {
+            state.terminalHistoryIdx = -1;
+            input.value = '';
+          }
+          e.preventDefault();
+        }
+      });
+    }
+
+    async function executeCommand(cmd) {
+      state.terminalHistory.push(cmd);
+      state.terminalHistoryIdx = -1;
+
+      const line = document.createElement('div');
+      line.className = 'term-line term-cmd';
+      line.textContent = `${promptEl.textContent} ${cmd}`;
+      output.appendChild(line);
+
+      if (cmd === 'clear') {
+        output.innerHTML = '';
+        return;
+      }
+      if (cmd === 'help') {
+        const helpLine = document.createElement('div');
+        helpLine.className = 'term-line term-info';
+        helpLine.textContent = `[Termux 가상 터미널 도움말]
+- 스마트폰 Termux의 실제 쉘 명령을 수행합니다 (예: ls, pwd, df -h, python3, git 등).
+- 'cd <dir>'로 작업 디렉토리를 자유롭게 이동할 수 있습니다.
+- 상단의 자주 쓰는 명령어 버튼을 누르면 즉시 실행됩니다.`;
+        output.appendChild(helpLine);
+        output.scrollTop = output.scrollHeight;
+        return;
+      }
+      if (cmd === 'exit') {
+        closeDesktopWindow('terminal');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/terminal/exec', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: cmd, cwd: state.terminalCwd })
+        });
+        const data = await res.json();
+        if (data.cwd) {
+          state.terminalCwd = data.cwd;
+          const shortCwd = data.cwd.split('/').slice(-2).join('/') || data.cwd;
+          promptEl.textContent = `termux:${shortCwd}$`;
+        }
+        const outLine = document.createElement('div');
+        outLine.className = `term-line ${data.exitCode === 0 ? 'term-success' : 'term-err'}`;
+        outLine.textContent = data.output || (data.exitCode === 0 ? '(성공 - 반환값 없음)' : `종료 코드: ${data.exitCode}`);
+        output.appendChild(outLine);
+      } catch (err) {
+        const errLine = document.createElement('div');
+        errLine.className = 'term-line term-err';
+        errLine.textContent = `실행 통신 오류: ${err.message}`;
+        output.appendChild(errLine);
+      }
+      output.scrollTop = output.scrollHeight;
+    }
+  }
+
+  // [App 2: Finder]
+  function setupFinderLogic() {
+    const newFileBtn = document.getElementById('btn-finder-new-file');
+    const refreshBtn = document.getElementById('btn-finder-refresh');
+
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        fetchFiles().then(() => renderFinderFiles());
+      });
+    }
+
+    if (newFileBtn) {
+      newFileBtn.addEventListener('click', () => {
+        const name = prompt('생성할 파일명을 입력하세요 (예: script.py, memo.txt):');
+        if (!name || !name.trim()) return;
+        fetch('/api/files/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: name.trim(), content: '' })
+        })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            showToast(`'${data.filename}' 파일이 생성되었습니다.`);
+            fetchFiles().then(() => {
+              renderFinderFiles();
+              openEditorWithFile(data.filename);
+            });
+          } else {
+            alert('파일 생성 실패: ' + (data.error || '오류'));
+          }
+        })
+        .catch(err => alert('파일 생성 통신 오류: ' + err.message));
+      });
+    }
+
+    // Filter sidebar
+    document.querySelectorAll('.finder-nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.finder-nav-item').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+        state.finderFilter = item.getAttribute('data-finder-filter') || 'all';
+        renderFinderFiles();
+      });
+    });
+  }
+
+  function getFileEmoji(file) {
+    if (file.type === 'image') return '🖼️';
+    if (file.type === 'video') return '🎬';
+    if (file.type === 'audio') return '🎵';
+    if (file.type === 'pdf') return '📕';
+    if (file.isText) return '📝';
+    if (file.type === 'archive') return '📦';
+    return '📄';
+  }
+
+  function renderFinderFiles() {
+    const grid = document.getElementById('finder-file-grid');
+    const status = document.getElementById('finder-status-text');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    const filter = state.finderFilter || 'all';
+    const list = (state.files || []).filter(f => filter === 'all' || f.type === filter);
+
+    if (status) status.textContent = `${list.length}개 항목`;
+
+    if (list.length === 0) {
+      grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #86868b; padding: 24px; font-size: 13px;">파일이 없습니다.</div>';
+      return;
+    }
+
+    list.forEach(file => {
+      const item = document.createElement('div');
+      item.className = 'finder-item';
+      item.innerHTML = `
+        <div class="finder-item-icon">${getFileEmoji(file)}</div>
+        <div class="finder-item-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
+      `;
+
+      item.addEventListener('dblclick', () => {
+        if (file.isText) {
+          openEditorWithFile(file.name);
+        } else {
+          const idx = state.files.findIndex(f => f.name === file.name);
+          if (idx !== -1) openPreview(idx);
+        }
+      });
+
+      grid.appendChild(item);
+    });
+  }
+
+  // [App 3: Code & Text Editor]
+  function setupEditorLogic() {
+    const textarea = document.getElementById('editor-textarea');
+    const gutter = document.getElementById('editor-gutter');
+    const filenameInput = document.getElementById('editor-filename-input');
+    const saveBtn = document.getElementById('btn-editor-save');
+    const statsBadge = document.getElementById('editor-stats-badge');
+    const saveStatus = document.getElementById('editor-save-status');
+
+    function updateStats() {
+      const lines = textarea.value.split('\n');
+      const count = lines.length;
+      const chars = textarea.value.length;
+      if (statsBadge) statsBadge.textContent = `${count}줄 | ${chars}자`;
+      if (gutter) {
+        gutter.innerHTML = Array.from({ length: count }, (_, i) => i + 1).join('<br>');
+      }
+    }
+
+    if (textarea) {
+      textarea.addEventListener('input', () => {
+        updateStats();
+        if (saveStatus) {
+          saveStatus.textContent = '수정 중...';
+          saveStatus.classList.remove('green');
+        }
+      });
+
+      textarea.addEventListener('scroll', () => {
+        if (gutter) gutter.scrollTop = textarea.scrollTop;
+      });
+
+      textarea.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+          e.preventDefault();
+          saveEditorContent();
+        }
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const start = textarea.selectionStart;
+          const end = textarea.selectionEnd;
+          textarea.value = textarea.value.substring(0, start) + '    ' + textarea.value.substring(end);
+          textarea.selectionStart = textarea.selectionEnd = start + 4;
+          updateStats();
+        }
+      });
+    }
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', saveEditorContent);
+    }
+
+    async function saveEditorContent() {
+      const filename = (filenameInput.value || '').trim();
+      if (!filename) {
+        alert('저장할 파일명을 입력해주세요.');
+        return;
+      }
+      const content = textarea.value;
+      try {
+        const res = await fetch('/api/files/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, content })
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (saveStatus) {
+            saveStatus.textContent = '저장됨 ✓';
+            saveStatus.classList.add('green');
+          }
+          const winTitle = document.getElementById('editor-win-title');
+          if (winTitle) winTitle.textContent = `코드 에디터 — ${filename}`;
+          showToast(`'${filename}' 파일이 정상 저장되었습니다.`);
+          fetchFiles().then(() => renderFinderFiles());
+        } else {
+          alert('저장 실패: ' + (data.error || '알 수 없는 오류'));
+        }
+      } catch (err) {
+        alert('저장 통신 오류: ' + err.message);
+      }
+    }
+  }
+
+  function openEditorWithFile(filename) {
+    const filenameInput = document.getElementById('editor-filename-input');
+    const textarea = document.getElementById('editor-textarea');
+    const gutter = document.getElementById('editor-gutter');
+    const winTitle = document.getElementById('editor-win-title');
+    const saveStatus = document.getElementById('editor-save-status');
+
+    if (filenameInput) filenameInput.value = filename;
+    if (winTitle) winTitle.textContent = `코드 에디터 — ${filename}`;
+    if (saveStatus) {
+      saveStatus.textContent = '불러오는 중...';
+      saveStatus.classList.remove('green');
+    }
+
+    fetch(`/api/preview/${encodeURIComponent(filename)}`)
+      .then(res => res.text())
+      .then(text => {
+        if (textarea) textarea.value = text;
+        const lines = text.split('\n');
+        if (gutter) gutter.innerHTML = Array.from({ length: lines.length }, (_, i) => i + 1).join('<br>');
+        const stats = document.getElementById('editor-stats-badge');
+        if (stats) stats.textContent = `${lines.length}줄 | ${text.length}자`;
+        if (saveStatus) {
+          saveStatus.textContent = '저장됨 ✓';
+          saveStatus.classList.add('green');
+        }
+        openDesktopWindow('editor');
+      })
+      .catch(err => {
+        alert('파일을 불러올 수 없습니다: ' + err.message);
+      });
+  }
+
+  // [App 4: Activity Monitor Widget]
+  function updateMonitorWidget() {
+    if (!state.dashboardData) return;
+    const d = state.dashboardData;
+
+    const cpuPct = document.getElementById('mon-cpu-pct');
+    const cpuBar = document.getElementById('mon-cpu-bar');
+    const cpuDetail = document.getElementById('mon-cpu-detail');
+    if (cpuPct && d.cpu) {
+      cpuPct.textContent = `${d.cpu.percent}%`;
+      cpuBar.style.width = `${d.cpu.percent}%`;
+      cpuDetail.textContent = `코어: ${d.cpu.cores}개 | 1분 부하: ${d.cpu.load1}`;
+    }
+
+    const memPct = document.getElementById('mon-mem-pct');
+    const memBar = document.getElementById('mon-mem-bar');
+    const memDetail = document.getElementById('mon-mem-detail');
+    if (memPct && d.memory) {
+      memPct.textContent = `${d.memory.percent}%`;
+      memBar.style.width = `${d.memory.percent}%`;
+      memDetail.textContent = `사용: ${d.memory.usedFormatted} / ${d.memory.totalFormatted}`;
+    }
+
+    const batPct = document.getElementById('mon-bat-pct');
+    const batBar = document.getElementById('mon-bat-bar');
+    const batDetail = document.getElementById('mon-bat-detail');
+    if (batPct && d.battery) {
+      const pct = d.battery.percentage !== null ? d.battery.percentage : 100;
+      batPct.textContent = `${pct}%`;
+      batBar.style.width = `${pct}%`;
+      batDetail.textContent = `상태: ${d.battery.status} (${d.battery.plugged})`;
+    }
+
+    const diskPct = document.getElementById('mon-disk-pct');
+    const diskBar = document.getElementById('mon-disk-bar');
+    const diskDetail = document.getElementById('mon-disk-detail');
+    if (diskPct && d.disk) {
+      diskPct.textContent = `${d.disk.percent}%`;
+      diskBar.style.width = `${d.disk.percent}%`;
+      diskDetail.textContent = `클라우드: ${d.disk.cloudUsedFormatted} (여유: ${d.disk.freeFormatted})`;
+    }
+
+    const uptime = document.getElementById('mon-uptime');
+    const ip = document.getElementById('mon-ip');
+    const pid = document.getElementById('mon-pid');
+    if (uptime && d.uptime) uptime.textContent = d.uptime.formatted;
+    if (ip && d.network) ip.textContent = `${d.network.localIp}:${d.network.port}`;
+    if (pid) pid.textContent = d.pid;
+
+    const refreshBtn = document.getElementById('btn-monitor-refresh');
+    if (refreshBtn && !refreshBtn.dataset.bound) {
+      refreshBtn.dataset.bound = 'true';
+      refreshBtn.addEventListener('click', () => {
+        fetchDashboardData(true).then(() => updateMonitorWidget());
+      });
+    }
+  }
+
+  // [App 5: Browser]
+  function setupBrowserLogic() {
+    const input = document.getElementById('browser-url-input');
+    const goBtn = document.getElementById('btn-browser-go');
+    const homeBtn = document.getElementById('btn-browser-home');
+    const iframe = document.getElementById('browser-iframe');
+
+    function navigate() {
+      let url = (input.value || '').trim();
+      if (!url) return;
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+      iframe.src = url;
+    }
+
+    if (goBtn) goBtn.addEventListener('click', navigate);
+    if (input) {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') navigate();
+      });
+    }
+    if (homeBtn) {
+      homeBtn.addEventListener('click', () => {
+        input.value = 'https://ko.wikipedia.org';
+        navigate();
+      });
+    }
+  }
+
+  // [App 6: Linux GUI / noVNC]
+  function setupLinuxVncLogic() {
+    const refreshBtn = document.getElementById('btn-vnc-refresh');
+    const connectBtn = document.getElementById('btn-connect-vnc');
+    const copyCmdBtn = document.getElementById('btn-copy-vnc-cmd');
+
+    if (refreshBtn) refreshBtn.addEventListener('click', checkVncStatus);
+    if (connectBtn) connectBtn.addEventListener('click', checkVncStatus);
+    if (copyCmdBtn) {
+      copyCmdBtn.addEventListener('click', () => {
+        const cmd = './setup-desktop.sh start';
+        navigator.clipboard.writeText(cmd).then(() => {
+          showToast('✓ 구축 명령어가 복사되었습니다: ' + cmd);
+        }).catch(() => {
+          showToast('복사 실패');
+        });
+      });
+    }
+  }
+
+  async function checkVncStatus() {
+    const setupView = document.getElementById('vnc-setup-view');
+    const activeView = document.getElementById('vnc-active-view');
+    const iframe = document.getElementById('vnc-iframe');
+
+    try {
+      const res = await fetch('/api/system/vnc-status');
+      const data = await res.json();
+      if (data.running) {
+        setupView.classList.add('hidden');
+        activeView.classList.remove('hidden');
+        const host = (state.dashboardData && state.dashboardData.network) ? state.dashboardData.network.localIp : window.location.hostname;
+        iframe.src = `http://${host}:6080/vnc.html?autoconnect=true`;
+      } else {
+        activeView.classList.add('hidden');
+        setupView.classList.remove('hidden');
+        iframe.src = '';
+      }
+    } catch (e) {
+      activeView.classList.add('hidden');
+      setupView.classList.remove('hidden');
+    }
+  }
+
+  // [App 7: Settings & Wallpaper]
+  function setupWallpaperTheme() {
+    const screen = document.getElementById('desktop-screen');
+    document.querySelectorAll('.wp-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const theme = btn.getAttribute('data-theme');
+        document.querySelectorAll('.wp-option').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        if (screen) {
+          screen.className = `desktop-screen theme-${theme}`;
+        }
+        localStorage.setItem('desktop_theme', theme);
+      });
+    });
+
+    const savedTheme = localStorage.getItem('desktop_theme') || 'sonoma';
+    if (screen) screen.className = `desktop-screen theme-${savedTheme}`;
+    const activeBtn = document.querySelector(`.wp-option[data-theme="${savedTheme}"]`);
+    if (activeBtn) {
+      document.querySelectorAll('.wp-option').forEach(b => b.classList.remove('active'));
+      activeBtn.classList.add('active');
+    }
   }
 
   // ================= Utilities =================

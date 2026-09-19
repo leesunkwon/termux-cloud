@@ -48,8 +48,12 @@
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
         <span>iCloud 드라이브</span>
       </button>
-      <button class="nav-tab-btn" id="tab-dashboard" data-view="dashboard">
+      <button class="nav-tab-btn" id="tab-desktop" data-view="desktop">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+        <span>가상 데스크탑</span>
+      </button>
+      <button class="nav-tab-btn" id="tab-dashboard" data-view="dashboard">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line><circle cx="7" cy="8" r="1.5" fill="currentColor"></circle><line x1="11" y1="8" x2="17" y2="8"></line><circle cx="7" cy="12" r="1.5" fill="currentColor"></circle><line x1="11" y1="12" x2="15" y2="12"></line></svg>
         <span>서버 대시보드</span>
       </button>
     </nav>
@@ -155,7 +159,39 @@
           </div>
         </div>
 
-        <!-- 선택 카드 2: 서버 상태 대시보드 -->
+        <!-- 선택 카드 2: 컴퓨터 사용 (가상 데스크탑 GUI) -->
+        <div class="portal-card card-desktop" id="portal-card-desktop">
+          <div class="portal-card-glow glow-purple"></div>
+          <div class="portal-card-header">
+            <div class="portal-icon-box icon-desktop">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+                <line x1="12" y1="17" x2="12" y2="21"></line>
+              </svg>
+            </div>
+            <span class="portal-tag purple">Cloud Web OS</span>
+          </div>
+
+          <div class="portal-card-body">
+            <h2 class="portal-card-title">컴퓨터 사용 (가상 데스크탑)</h2>
+            <p class="portal-card-desc">웹 브라우저 속 완성형 가상 컴퓨터 GUI. 실제 쉘 터미널, 파일 탐색기, 코드 에디터, 모니터를 멀티 윈도우로 제어하세요.</p>
+            
+            <div class="portal-stat-pill">
+              <span class="pill-dot purple"></span>
+              <span id="portal-desktop-summary">가상 데스크탑 GUI 가동 준비됨</span>
+            </div>
+          </div>
+
+          <div class="portal-card-footer">
+            <span class="portal-btn-label">가상 컴퓨터 열기</span>
+            <div class="portal-arrow-circle">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- 선택 카드 3: 서버 상태 대시보드 -->
         <div class="portal-card card-dashboard" id="portal-card-dashboard">
           <div class="portal-card-glow glow-orange"></div>
           <div class="portal-card-header">
@@ -639,6 +675,544 @@
           </div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- ======================================================= -->
+  <!-- 뷰 4: 가상 데스크탑 (컴퓨터 사용 / Cloud Web OS) -->
+  <!-- ======================================================= -->
+  <section class="view-section hidden" id="view-desktop">
+    <div class="desktop-screen theme-sonoma" id="desktop-screen">
+      <!-- 1. 상단 macOS 스타일 글로벌 메뉴바 -->
+      <header class="desktop-menubar">
+        <div class="menubar-left">
+          <button class="menubar-item menubar-apple-btn" id="btn-desktop-apple" title="가상 컴퓨터 시스템 정보">
+            <svg viewBox="0 0 170 170" width="14" height="14" fill="currentColor">
+              <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.69-3.08-7.7-7.9-12.04-14.47-6.09-9.17-10.9-19.78-14.42-31.81-3.52-12.04-5.28-23.49-5.28-34.36 0-14.52 3.69-26.68 11.07-36.48 7.38-9.8 16.74-14.86 28.08-15.18 4.8 0 10.36 1.34 16.69 4.02 6.33 2.68 10.27 4.08 11.82 4.19 2.02-.11 6.1-1.57 12.24-4.37 6.14-2.8 11.53-4.08 16.18-3.85 15.34.8 27.09 6.78 35.25 17.94-13.62 8.26-20.27 19.56-19.95 33.9.23 11.39 4.54 20.89 12.92 28.5 4.3 3.93 9.35 6.89 15.15 8.87-2.6 7.64-5.83 15.42-9.69 23.35zM119.22 31.84c0-7.72 2.76-14.93 8.28-21.62 5.53-6.7 12.35-10.74 20.47-12.12.22 1.34.33 2.46.33 3.36 0 7.61-2.91 15-8.73 22.18-5.82 7.17-12.92 11.23-21.31 12.18-.34-1.34-.51-2.67-.51-3.98z"/>
+            </svg>
+          </button>
+          <span class="menubar-app-title" id="desktop-active-app-name">가상 데스크탑</span>
+          <div class="menubar-menus">
+            <span class="menubar-item" id="menu-item-files" data-action="open-finder">파일</span>
+            <span class="menubar-item" id="menu-item-terminal" data-action="open-terminal">터미널</span>
+            <span class="menubar-item" id="menu-item-editor" data-action="open-editor">코드 편집</span>
+            <span class="menubar-item" id="menu-item-monitor" data-action="open-monitor">모니터</span>
+          </div>
+        </div>
+
+        <div class="menubar-right">
+          <!-- Wi-Fi IP 배지 -->
+          <div class="menubar-status-item" id="menubar-ip-badge" title="클라우드 접속 IP">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+            <span id="menubar-ip-text">192.168.X.X</span>
+          </div>
+
+          <!-- 배터리 상태 -->
+          <div class="menubar-status-item" id="menubar-battery-badge" title="스마트폰 배터리">
+            <span id="menubar-battery-pct">100%</span>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="18" height="12" rx="2" ry="2"></rect><line x1="23" y1="13" x2="23" y2="11"></line><rect x="3" y="8" width="12" height="8" rx="1" ry="1" fill="currentColor"></rect></svg>
+          </div>
+
+          <!-- 실시간 디지털 시계 -->
+          <div class="menubar-status-item menubar-clock" id="desktop-clock">
+            <span>00:00</span>
+          </div>
+
+          <!-- 전체화면 토글 버튼 -->
+          <button class="menubar-icon-btn" id="btn-desktop-fullscreen" title="전체화면 토글">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- 2. 데스크탑 캔버스 (바탕화면) -->
+      <div class="desktop-canvas" id="desktop-canvas">
+        <!-- 바탕화면 앱 아이콘 바로가기 그리드 -->
+        <div class="desktop-icons-grid">
+          <!-- 터미널 바로가기 -->
+          <div class="desktop-shortcut" data-app="terminal" tabindex="0" title="터미널 쉘 열기">
+            <div class="shortcut-icon icon-bg-black">
+              <span class="shortcut-symbol">💻</span>
+            </div>
+            <span class="shortcut-name">터미널</span>
+          </div>
+
+          <!-- 파일 탐색기 바로가기 -->
+          <div class="desktop-shortcut" data-app="finder" tabindex="0" title="파일 탐색기 열기">
+            <div class="shortcut-icon icon-bg-blue">
+              <span class="shortcut-symbol">📁</span>
+            </div>
+            <span class="shortcut-name">내 보관함</span>
+          </div>
+
+          <!-- 코드 에디터 바로가기 -->
+          <div class="desktop-shortcut" data-app="editor" tabindex="0" title="코드 & 텍스트 에디터 열기">
+            <div class="shortcut-icon icon-bg-orange">
+              <span class="shortcut-symbol">📝</span>
+            </div>
+            <span class="shortcut-name">코드 에디터</span>
+          </div>
+
+          <!-- 활동 모니터 바로가기 -->
+          <div class="desktop-shortcut" data-app="monitor" tabindex="0" title="시스템 리소스 모니터링">
+            <div class="shortcut-icon icon-bg-green">
+              <span class="shortcut-symbol">📊</span>
+            </div>
+            <span class="shortcut-name">활동 모니터</span>
+          </div>
+
+          <!-- 웹 브라우저 바로가기 -->
+          <div class="desktop-shortcut" data-app="browser" tabindex="0" title="웹 브라우저 열기">
+            <div class="shortcut-icon icon-bg-cyan">
+              <span class="shortcut-symbol">🌐</span>
+            </div>
+            <span class="shortcut-name">웹 브라우저</span>
+          </div>
+
+          <!-- 리눅스 GUI (noVNC) 바로가기 -->
+          <div class="desktop-shortcut" data-app="linux" tabindex="0" title="Termux XFCE4 데스크탑 GUI 연동">
+            <div class="shortcut-icon icon-bg-purple">
+              <span class="shortcut-symbol">🐧</span>
+            </div>
+            <span class="shortcut-name">리눅스 GUI</span>
+          </div>
+
+          <!-- 설정 바로가기 -->
+          <div class="desktop-shortcut" data-app="settings" tabindex="0" title="바탕화면 및 환경설정">
+            <div class="shortcut-icon icon-bg-gray">
+              <span class="shortcut-symbol">⚙️</span>
+            </div>
+            <span class="shortcut-name">환경설정</span>
+          </div>
+        </div>
+
+        <!-- 3. 멀티 윈도우 레이어 -->
+        <!-- [창 1: 터미널] -->
+        <div class="desktop-window window-dark hidden" id="win-terminal" data-app="terminal">
+          <div class="window-header">
+            <div class="window-traffic-lights">
+              <button class="traffic-light btn-close" data-app="terminal"></button>
+              <button class="traffic-light btn-min" data-app="terminal"></button>
+              <button class="traffic-light btn-max" data-app="terminal"></button>
+            </div>
+            <div class="window-title">
+              <span class="win-title-icon">💻</span>
+              <span class="win-title-text" id="terminal-win-title">터미널 — bash</span>
+            </div>
+            <div class="window-header-actions">
+              <button class="win-btn-sm" id="btn-term-clear" title="화면 비우기">Clear</button>
+            </div>
+          </div>
+          <div class="window-body terminal-body">
+            <div class="terminal-presets">
+              <span class="preset-label">자주 쓰는 명령어:</span>
+              <button class="preset-cmd-btn" data-cmd="ls -la">ls -la</button>
+              <button class="preset-cmd-btn" data-cmd="pwd">pwd</button>
+              <button class="preset-cmd-btn" data-cmd="df -h">df -h</button>
+              <button class="preset-cmd-btn" data-cmd="python3 --version">python3</button>
+              <button class="preset-cmd-btn" data-cmd="git status">git status</button>
+              <button class="preset-cmd-btn" data-cmd="termux-battery-status">배터리</button>
+            </div>
+            <div class="terminal-output" id="terminal-output">
+              <div class="term-line term-welcome">
+   _____                       __  __     ________                 __
+  |_   _|__ _ __ _ __ ___  _   _\ \/ /    / ____/ /___  __  ______/ /
+    | |/ _ \ '__| '_ ` _ \| | | |\  /    / /   / / __ \/ / / / __  / 
+    | |  __/ |  | | | | | | |_| |/  \   / /___/ / /_/ / /_/ / /_/ /  
+    |_|\___|_|  |_| |_| |_|\__,_/_/\_\  \____/_/\____/\__,_/\__,_/   
+              </div>
+              <div class="term-line term-info">Termux Cloud OS Virtual Terminal v1.3.0 Ready.</div>
+              <div class="term-line term-muted">명령어를 입력하거나 상단의 빠른 명령어 버튼을 누르세요.</div>
+            </div>
+            <form class="terminal-input-row" id="terminal-form">
+              <span class="terminal-prompt" id="terminal-prompt">termux:~$</span>
+              <input type="text" class="terminal-input" id="terminal-input" autocomplete="off" spellcheck="false" placeholder="명령어 입력...">
+              <button type="submit" class="terminal-send-btn">실행</button>
+            </form>
+          </div>
+          <div class="window-resize-handle"></div>
+        </div>
+
+        <!-- [창 2: 파일 탐색기 (Finder)] -->
+        <div class="desktop-window hidden" id="win-finder" data-app="finder">
+          <div class="window-header">
+            <div class="window-traffic-lights">
+              <button class="traffic-light btn-close" data-app="finder"></button>
+              <button class="traffic-light btn-min" data-app="finder"></button>
+              <button class="traffic-light btn-max" data-app="finder"></button>
+            </div>
+            <div class="window-title">
+              <span class="win-title-icon">📁</span>
+              <span class="win-title-text">Finder — 내 보관함</span>
+            </div>
+            <div class="window-header-actions">
+              <button class="win-btn-sm" id="btn-finder-new-file">+ 새 파일</button>
+              <button class="win-btn-sm" id="btn-finder-refresh">새로고침</button>
+            </div>
+          </div>
+          <div class="window-body finder-body">
+            <div class="finder-sidebar">
+              <div class="finder-nav-title">즐겨찾기</div>
+              <div class="finder-nav-item active" data-finder-filter="all">📁 모든 파일</div>
+              <div class="finder-nav-item" data-finder-filter="image">🖼️ 사진</div>
+              <div class="finder-nav-item" data-finder-filter="document">📄 문서 / 텍스트</div>
+              <div class="finder-nav-item" data-finder-filter="video">🎬 동영상</div>
+              <div class="finder-nav-item" data-finder-filter="audio">🎵 음악</div>
+            </div>
+            <div class="finder-content">
+              <div class="finder-grid" id="finder-file-grid">
+                <!-- 파일 목록 동적 렌더링 -->
+              </div>
+            </div>
+          </div>
+          <div class="window-statusbar">
+            <span id="finder-status-text">항목 로딩 중...</span>
+          </div>
+          <div class="window-resize-handle"></div>
+        </div>
+
+        <!-- [창 3: 코드 & 텍스트 에디터] -->
+        <div class="desktop-window hidden" id="win-editor" data-app="editor">
+          <div class="window-header">
+            <div class="window-traffic-lights">
+              <button class="traffic-light btn-close" data-app="editor"></button>
+              <button class="traffic-light btn-min" data-app="editor"></button>
+              <button class="traffic-light btn-max" data-app="editor"></button>
+            </div>
+            <div class="window-title">
+              <span class="win-title-icon">📝</span>
+              <span class="win-title-text" id="editor-win-title">코드 에디터 — Untitled.txt</span>
+            </div>
+            <div class="window-header-actions">
+              <button class="win-btn-sm btn-primary-sm" id="btn-editor-save">💾 저장</button>
+            </div>
+          </div>
+          <div class="window-body editor-body">
+            <div class="editor-toolbar">
+              <input type="text" class="editor-filename-input" id="editor-filename-input" placeholder="파일명 (예: script.py, memo.txt)">
+              <div class="editor-tools-right">
+                <span class="editor-badge" id="editor-stats-badge">1줄 | 0자</span>
+                <span class="editor-badge green" id="editor-save-status">저장됨</span>
+              </div>
+            </div>
+            <div class="editor-container">
+              <div class="editor-gutter" id="editor-gutter">1</div>
+              <textarea class="editor-textarea" id="editor-textarea" spellcheck="false" placeholder="내용을 작성하세요..."></textarea>
+            </div>
+          </div>
+          <div class="window-statusbar">
+            <span>UTF-8</span>
+            <span>단축키: Ctrl + S (저장)</span>
+          </div>
+          <div class="window-resize-handle"></div>
+        </div>
+
+        <!-- [창 4: 활동 모니터 (Activity Monitor)] -->
+        <div class="desktop-window hidden" id="win-monitor" data-app="monitor">
+          <div class="window-header">
+            <div class="window-traffic-lights">
+              <button class="traffic-light btn-close" data-app="monitor"></button>
+              <button class="traffic-light btn-min" data-app="monitor"></button>
+              <button class="traffic-light btn-max" data-app="monitor"></button>
+            </div>
+            <div class="window-title">
+              <span class="win-title-icon">📊</span>
+              <span class="win-title-text">활동 모니터 (시스템 리소스)</span>
+            </div>
+            <div class="window-header-actions">
+              <button class="win-btn-sm" id="btn-monitor-refresh">갱신</button>
+            </div>
+          </div>
+          <div class="window-body monitor-body">
+            <div class="monitor-grid">
+              <div class="monitor-card">
+                <div class="monitor-card-header">
+                  <span class="monitor-card-label">CPU 사용률</span>
+                  <span class="monitor-card-val" id="mon-cpu-pct">0%</span>
+                </div>
+                <div class="monitor-progress-track">
+                  <div class="monitor-progress-bar blue" id="mon-cpu-bar" style="width: 0%"></div>
+                </div>
+                <div class="monitor-subtext" id="mon-cpu-detail">코어 수: -</div>
+              </div>
+
+              <div class="monitor-card">
+                <div class="monitor-card-header">
+                  <span class="monitor-card-label">메모리 (RAM)</span>
+                  <span class="monitor-card-val" id="mon-mem-pct">0%</span>
+                </div>
+                <div class="monitor-progress-track">
+                  <div class="monitor-progress-bar purple" id="mon-mem-bar" style="width: 0%"></div>
+                </div>
+                <div class="monitor-subtext" id="mon-mem-detail">사용량: - / -</div>
+              </div>
+
+              <div class="monitor-card">
+                <div class="monitor-card-header">
+                  <span class="monitor-card-label">스마트폰 배터리</span>
+                  <span class="monitor-card-val" id="mon-bat-pct">100%</span>
+                </div>
+                <div class="monitor-progress-track">
+                  <div class="monitor-progress-bar green" id="mon-bat-bar" style="width: 100%"></div>
+                </div>
+                <div class="monitor-subtext" id="mon-bat-detail">상태: 정상</div>
+              </div>
+
+              <div class="monitor-card">
+                <div class="monitor-card-header">
+                  <span class="monitor-card-label">디스크 저장공간</span>
+                  <span class="monitor-card-val" id="mon-disk-pct">0%</span>
+                </div>
+                <div class="monitor-progress-track">
+                  <div class="monitor-progress-bar orange" id="mon-disk-bar" style="width: 0%"></div>
+                </div>
+                <div class="monitor-subtext" id="mon-disk-detail">여유 공간 확인 중...</div>
+              </div>
+            </div>
+
+            <div class="monitor-info-strip">
+              <div class="mon-info-item">
+                <span class="mon-info-key">⏱️ 가동 시간</span>
+                <span class="mon-info-val" id="mon-uptime">-</span>
+              </div>
+              <div class="mon-info-item">
+                <span class="mon-info-key">📡 로컬 IP</span>
+                <span class="mon-info-val" id="mon-ip">-</span>
+              </div>
+              <div class="mon-info-item">
+                <span class="mon-info-key">🆔 PID</span>
+                <span class="mon-info-val" id="mon-pid">-</span>
+              </div>
+            </div>
+          </div>
+          <div class="window-resize-handle"></div>
+        </div>
+
+        <!-- [창 5: 웹 브라우저] -->
+        <div class="desktop-window hidden" id="win-browser" data-app="browser">
+          <div class="window-header">
+            <div class="window-traffic-lights">
+              <button class="traffic-light btn-close" data-app="browser"></button>
+              <button class="traffic-light btn-min" data-app="browser"></button>
+              <button class="traffic-light btn-max" data-app="browser"></button>
+            </div>
+            <div class="window-title">
+              <span class="win-title-icon">🌐</span>
+              <span class="win-title-text">웹 브라우저</span>
+            </div>
+            <div class="window-header-actions">
+              <button class="win-btn-sm" id="btn-browser-home">홈</button>
+            </div>
+          </div>
+          <div class="window-body browser-body">
+            <div class="browser-address-bar">
+              <input type="text" class="browser-url-input" id="browser-url-input" value="https://ko.wikipedia.org" placeholder="https://...">
+              <button class="browser-go-btn" id="btn-browser-go">이동</button>
+            </div>
+            <div class="browser-frame-wrap">
+              <iframe class="browser-iframe" id="browser-iframe" src="about:blank"></iframe>
+            </div>
+          </div>
+          <div class="window-resize-handle"></div>
+        </div>
+
+        <!-- [창 6: 리눅스 GUI (X11 / noVNC) 데스크탑] -->
+        <div class="desktop-window hidden" id="win-linux" data-app="linux">
+          <div class="window-header">
+            <div class="window-traffic-lights">
+              <button class="traffic-light btn-close" data-app="linux"></button>
+              <button class="traffic-light btn-min" data-app="linux"></button>
+              <button class="traffic-light btn-max" data-app="linux"></button>
+            </div>
+            <div class="window-title">
+              <span class="win-title-icon">🐧</span>
+              <span class="win-title-text">가상 리눅스 GUI (XFCE4 / noVNC)</span>
+            </div>
+            <div class="window-header-actions">
+              <button class="win-btn-sm" id="btn-vnc-refresh">상태 재확인</button>
+            </div>
+          </div>
+          <div class="window-body vnc-body">
+            <!-- VNC 가동 중일 때 표시되는 임베디드 뷰 -->
+            <div class="vnc-active-view hidden" id="vnc-active-view">
+              <iframe class="vnc-iframe" id="vnc-iframe" src=""></iframe>
+            </div>
+            <!-- VNC 미가동 시 표시되는 1-Click 구축 가이드 -->
+            <div class="vnc-setup-view" id="vnc-setup-view">
+              <div class="vnc-guide-card">
+                <div class="vnc-guide-badge">🐧 Termux 완전한 리눅스 데스크탑 환경</div>
+                <h3 class="vnc-guide-title">스마트폰에서 완전한 그래픽 OS 구축하기</h3>
+                <p class="vnc-guide-desc">Termux에 <strong>XFCE4 그래픽 데스크탑</strong>과 <strong>noVNC</strong>를 구동하면, 웹 브라우저 안에서 진짜 리눅스 컴퓨터를 화면 그대로 조작할 수 있습니다.</p>
+
+                <div class="vnc-guide-steps">
+                  <div class="guide-step-item">
+                    <span class="step-num">1</span>
+                    <div class="step-detail">
+                      <strong>터미널 창 또는 Termux 앱에서 원클릭 구축 스크립트 실행:</strong>
+                      <div class="code-box">
+                        <code id="vnc-code-sample">./setup-desktop.sh start</code>
+                        <button class="copy-cmd-btn" id="btn-copy-vnc-cmd">복사</button>
+                      </div>
+                      <p class="step-hint">* 자동으로 XFCE4 및 noVNC가 설치되고 6080 포트로 백그라운드 구동됩니다.</p>
+                    </div>
+                  </div>
+
+                  <div class="guide-step-item">
+                    <span class="step-num">2</span>
+                    <div class="step-detail">
+                      <strong>구동 후 아래 [데스크탑 화면 연결] 버튼 누르기:</strong>
+                      <div class="guide-action-row">
+                        <button class="btn btn-primary" id="btn-connect-vnc">
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+                          <span>지금 데스크탑 화면 연결</span>
+                        </button>
+                        <a href="http://localhost:6080/vnc.html" target="_blank" class="btn btn-outline" id="btn-open-vnc-tab">새 탭으로 열기 ↗</a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="window-resize-handle"></div>
+        </div>
+
+        <!-- [창 7: 데스크탑 환경설정] -->
+        <div class="desktop-window hidden" id="win-settings" data-app="settings">
+          <div class="window-header">
+            <div class="window-traffic-lights">
+              <button class="traffic-light btn-close" data-app="settings"></button>
+              <button class="traffic-light btn-min" data-app="settings"></button>
+              <button class="traffic-light btn-max" data-app="settings"></button>
+            </div>
+            <div class="window-title">
+              <span class="win-title-icon">⚙️</span>
+              <span class="win-title-text">데스크탑 환경설정</span>
+            </div>
+          </div>
+          <div class="window-body settings-body">
+            <div class="settings-section">
+              <h4>바탕화면 테마</h4>
+              <div class="wallpaper-selector">
+                <button class="wp-option active" data-theme="sonoma">
+                  <div class="wp-preview wp-sonoma"></div>
+                  <span>Sonoma Dunes</span>
+                </button>
+                <button class="wp-option" data-theme="sequoia">
+                  <div class="wp-preview wp-sequoia"></div>
+                  <span>Sequoia Night</span>
+                </button>
+                <button class="wp-option" data-theme="cyber">
+                  <div class="wp-preview wp-cyber"></div>
+                  <span>Cyber Neon</span>
+                </button>
+                <button class="wp-option" data-theme="midnight">
+                  <div class="wp-preview wp-midnight"></div>
+                  <span>Midnight Ocean</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h4>가상 컴퓨터 정보</h4>
+              <div class="settings-info-list">
+                <div class="settings-row">
+                  <span>시스템 버전</span>
+                  <span class="font-semibold">Termux Cloud OS v1.3.0</span>
+                </div>
+                <div class="settings-row">
+                  <span>디바이스 환경</span>
+                  <span>Android (Termux) Galaxy Personal Hub</span>
+                </div>
+                <div class="settings-row">
+                  <span>가상 윈도우 매니저</span>
+                  <span>HTML5 Glassmorphism UI Engine</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="window-resize-handle"></div>
+        </div>
+
+        <!-- [창 8: 이 컴퓨터에 관하여 (About)] -->
+        <div class="desktop-window hidden" id="win-about" data-app="about">
+          <div class="window-header">
+            <div class="window-traffic-lights">
+              <button class="traffic-light btn-close" data-app="about"></button>
+            </div>
+            <div class="window-title">이 가상 컴퓨터에 관하여</div>
+          </div>
+          <div class="window-body about-body">
+            <div class="about-mac-icon">
+              <svg viewBox="0 0 170 170" width="56" height="56" fill="currentColor">
+                <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.69-3.08-7.7-7.9-12.04-14.47-6.09-9.17-10.9-19.78-14.42-31.81-3.52-12.04-5.28-23.49-5.28-34.36 0-14.52 3.69-26.68 11.07-36.48 7.38-9.8 16.74-14.86 28.08-15.18 4.8 0 10.36 1.34 16.69 4.02 6.33 2.68 10.27 4.08 11.82 4.19 2.02-.11 6.1-1.57 12.24-4.37 6.14-2.8 11.53-4.08 16.18-3.85 15.34.8 27.09 6.78 35.25 17.94-13.62 8.26-20.27 19.56-19.95 33.9.23 11.39 4.54 20.89 12.92 28.5 4.3 3.93 9.35 6.89 15.15 8.87-2.6 7.64-5.83 15.42-9.69 23.35zM119.22 31.84c0-7.72 2.76-14.93 8.28-21.62 5.53-6.7 12.35-10.74 20.47-12.12.22 1.34.33 2.46.33 3.36 0 7.61-2.91 15-8.73 22.18-5.82 7.17-12.92 11.23-21.31 12.18-.34-1.34-.51-2.67-.51-3.98z"/>
+              </svg>
+            </div>
+            <h2 class="about-title">Termux Cloud OS</h2>
+            <p class="about-version">버전 1.3.0 (Build 2026.09)</p>
+            <div class="about-specs">
+              <div class="about-spec-row">
+                <span class="spec-label">기기</span>
+                <span class="spec-value" id="about-device-name">Galaxy Android (Termux)</span>
+              </div>
+              <div class="about-spec-row">
+                <span class="spec-label">프로세서</span>
+                <span class="spec-value" id="about-cpu-name">ARM64 Multi-Core</span>
+              </div>
+              <div class="about-spec-row">
+                <span class="spec-label">메모리</span>
+                <span class="spec-value" id="about-mem-name">-</span>
+              </div>
+              <div class="about-spec-row">
+                <span class="spec-label">시동 디스크</span>
+                <span class="spec-value">Termux Internal Storage</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. 하단 macOS 스타일 플로팅 독 (Dock) -->
+      <footer class="desktop-dock-wrap">
+        <div class="desktop-dock" id="desktop-dock">
+          <button class="dock-item" data-app="finder" title="내 보관함 (Finder)">
+            <span class="dock-icon">📁</span>
+            <span class="dock-label">내 보관함</span>
+            <span class="dock-dot hidden" data-app-dot="finder"></span>
+          </button>
+          <button class="dock-item" data-app="terminal" title="터미널">
+            <span class="dock-icon">💻</span>
+            <span class="dock-label">터미널</span>
+            <span class="dock-dot hidden" data-app-dot="terminal"></span>
+          </button>
+          <button class="dock-item" data-app="editor" title="코드 & 텍스트 에디터">
+            <span class="dock-icon">📝</span>
+            <span class="dock-label">코드 에디터</span>
+            <span class="dock-dot hidden" data-app-dot="editor"></span>
+          </button>
+          <button class="dock-item" data-app="monitor" title="활동 모니터">
+            <span class="dock-icon">📊</span>
+            <span class="dock-label">활동 모니터</span>
+            <span class="dock-dot hidden" data-app-dot="monitor"></span>
+          </button>
+          <button class="dock-item" data-app="browser" title="웹 브라우저">
+            <span class="dock-icon">🌐</span>
+            <span class="dock-label">웹 브라우저</span>
+            <span class="dock-dot hidden" data-app-dot="browser"></span>
+          </button>
+          <button class="dock-item" data-app="linux" title="가상 리눅스 (noVNC)">
+            <span class="dock-icon">🐧</span>
+            <span class="dock-label">리눅스 GUI</span>
+            <span class="dock-dot hidden" data-app-dot="linux"></span>
+          </button>
+          <span class="dock-divider"></span>
+          <button class="dock-item" data-app="settings" title="환경설정">
+            <span class="dock-icon">⚙️</span>
+            <span class="dock-label">환경설정</span>
+            <span class="dock-dot hidden" data-app-dot="settings"></span>
+          </button>
+        </div>
+      </footer>
     </div>
   </section>
 

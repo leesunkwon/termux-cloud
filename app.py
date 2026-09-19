@@ -11,7 +11,7 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
-APP_VERSION = 'v1.2.0'
+APP_VERSION = 'v1.3.0'
 SERVER_START_TIME = datetime.now()
 
 # 저장 경로 설정 (환경변수로 변경 가능: 예: STORAGE_PATH=/sdcard/MyCloud)
@@ -21,6 +21,9 @@ STORAGE_DIR = os.environ.get('STORAGE_PATH', DEFAULT_STORAGE_DIR)
 
 # 저장 폴더가 없으면 생성
 os.makedirs(STORAGE_DIR, exist_ok=True)
+
+# 가상 터미널 기본 작업 디렉토리
+SESSION_CWD = os.path.expanduser('~') if os.path.exists(os.path.expanduser('~')) else BASE_DIR
 
 # 2GB 최대 업로드 제한 (필요시 조절 가능)
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024
@@ -180,6 +183,155 @@ def delete_file(filename):
         return jsonify({'success': True, 'deleted': safe_name})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+# 파일 내용 저장 API (웹 코드/텍스트 에디터용)
+@app.route('/api/files/save', methods=['POST'])
+def save_file_content():
+    try:
+        data = request.get_json(force=True) or {}
+        filename = data.get('filename', '').strip()
+        content = data.get('content', '')
+        if not filename:
+            return jsonify({'success': False, 'error': '파일명이 지정되지 않았습니다.'}), 400
+
+        safe_name = os.path.basename(filename)
+        filepath = os.path.join(STORAGE_DIR, safe_name)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        stat = os.stat(filepath)
+        return jsonify({
+            'success': True,
+            'filename': safe_name,
+            'size': stat.st_size,
+            'sizeFormatted': format_size(stat.st_size),
+            'modified': int(stat.st_mtime * 1000)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# 새 파일 생성 API (가상 데스크탑 및 클라우드용)
+@app.route('/api/files/create', methods=['POST'])
+def create_empty_file():
+    try:
+        data = request.get_json(force=True) or {}
+        filename = data.get('filename', '').strip()
+        content = data.get('content', '')
+        if not filename:
+            return jsonify({'success': False, 'error': '파일명이 지정되지 않았습니다.'}), 400
+
+        safe_name = os.path.basename(filename)
+        filepath = os.path.join(STORAGE_DIR, safe_name)
+        if os.path.exists(filepath):
+            return jsonify({'success': False, 'error': '이미 동일한 이름의 파일이 존재합니다.'}), 400
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        stat = os.stat(filepath)
+        return jsonify({
+            'success': True,
+            'filename': safe_name,
+            'size': stat.st_size,
+            'sizeFormatted': format_size(stat.st_size),
+            'modified': int(stat.st_mtime * 1000)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# 가상 터미널 쉘 명령어 실행 API
+@app.route('/api/terminal/exec', methods=['POST'])
+def terminal_exec():
+    global SESSION_CWD
+    try:
+        data = request.get_json(force=True) or {}
+        raw_cmd = data.get('command', '').strip()
+        client_cwd = data.get('cwd', '').strip()
+
+        current_dir = client_cwd if (client_cwd and os.path.isdir(client_cwd)) else SESSION_CWD
+        if not os.path.isdir(current_dir):
+            current_dir = BASE_DIR
+
+        if not raw_cmd:
+            return jsonify({
+                'success': True,
+                'output': '',
+                'cwd': current_dir,
+                'exitCode': 0
+            })
+
+        # 'cd' 명령어 특별 처리 (디렉토리 이동)
+        if raw_cmd == 'cd' or raw_cmd.startswith('cd '):
+            parts = raw_cmd.split(maxsplit=1)
+            target = parts[1].strip() if len(parts) > 1 else os.path.expanduser('~')
+            target = os.path.expanduser(target.strip('"\''))
+            new_path = os.path.normpath(os.path.join(current_dir, target))
+            if os.path.isdir(new_path):
+                SESSION_CWD = new_path
+                return jsonify({
+                    'success': True,
+                    'output': '',
+                    'cwd': new_path,
+                    'exitCode': 0
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'output': f"cd: 디렉터리를 찾을 수 없습니다: {parts[1] if len(parts) > 1 else ''}\n",
+                    'cwd': current_dir,
+                    'exitCode': 1
+                })
+
+        # 일반 쉘 명령어 실행 (최대 15초 타임아웃)
+        proc = subprocess.run(
+            raw_cmd,
+            shell=True,
+            cwd=current_dir,
+            capture_output=True,
+            text=True,
+            timeout=15
+        )
+        output = proc.stdout + proc.stderr
+        return jsonify({
+            'success': proc.returncode == 0,
+            'output': output,
+            'cwd': current_dir,
+            'exitCode': proc.returncode
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            'success': False,
+            'output': '명령어 실행 시간이 초과되었습니다 (최대 15초 제한).\n',
+            'cwd': current_dir,
+            'exitCode': 124
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'output': f"명령 실행 오류: {str(e)}\n",
+            'cwd': current_dir,
+            'exitCode': 1
+        })
+
+# noVNC / VNC 서버 연결 상태 확인 API
+@app.route('/api/system/vnc-status', methods=['GET'])
+def check_vnc_status():
+    import socket
+    port = int(os.environ.get('VNC_PORT', 6080))
+    is_open = False
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.5)
+        res = s.connect_ex(('127.0.0.1', port))
+        is_open = (res == 0)
+        s.close()
+    except Exception:
+        is_open = False
+    return jsonify({
+        'success': True,
+        'running': is_open,
+        'port': port
+    })
 
 @app.route('/api/storage', methods=['GET'])
 def storage_info():
