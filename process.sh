@@ -1,17 +1,16 @@
 #!/bin/bash
-# Shared process identity check; never signal an unrelated reused PID.
+# Read process arguments and cwd on Termux/Linux and macOS through the same helper.
+pulse_process_command() {
+    local pulse_python
+    pulse_python=$(command -v python3 || command -v python) || {
+        echo "서버 프로세스 확인에 Python이 필요합니다." >&2
+        return 1
+    }
+    "$pulse_python" "$SCRIPT_DIR/processctl.py" "$@"
+}
 pulse_pid_matches() {
-    local pulse_pid="$1"
-    [[ "$pulse_pid" =~ ^[0-9]+$ ]] || return 1
-    local pulse_cmd
-    pulse_cmd=$(ps -p "$pulse_pid" -o args= 2>/dev/null) || return 1
-    if [[ "$pulse_cmd" == *"$SCRIPT_DIR/app.py"* ]]; then
-        return 0
-    fi
-    # Supports migration from older Termux launches using a relative app.py path.
-    if [ -e "/proc/$pulse_pid/cwd" ] && [ "$(readlink "/proc/$pulse_pid/cwd")" = "$SCRIPT_DIR" ]; then
-        [[ "$pulse_cmd" =~ python[^[:space:]]*[[:space:]]+app\.py([[:space:]]|$) ]]
-        return $?
-    fi
-    return 1
+    pulse_process_command match "$1"
+}
+pulse_server_pids() {
+    pulse_process_command list
 }

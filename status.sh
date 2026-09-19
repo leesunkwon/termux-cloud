@@ -31,11 +31,13 @@ LOCAL_IP=$(get_local_ip)
 RUNNING=false
 SERVER_PID=""
 
-if [ -f "$PID_FILE" ]; then
-    SERVER_PID=$(cat "$PID_FILE")
-    if kill -0 "$SERVER_PID" 2>/dev/null && pulse_pid_matches "$SERVER_PID"; then
-        RUNNING=true
-    fi
+if ! SERVER_PIDS=$(pulse_server_pids); then
+    echo "서버 상태를 확인하지 못했습니다. 프로세스 조회 권한을 확인하세요."
+    exit 1
+fi
+if [ -n "$SERVER_PIDS" ]; then
+    SERVER_PID=$(echo "$SERVER_PIDS" | head -n 1)
+    RUNNING=true
 fi
 
 

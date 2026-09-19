@@ -1,7 +1,7 @@
 # ⚡ Pulse — 스마트폰 개인 클라우드와 웹 데스크톱
 
 Pulse는 남는 안드로이드 스마트폰을 Termux에서 개인 서버로 사용하는 프로젝트입니다.
-현재 버전은 **v1.5.0**입니다. Python/Flask 단일 서버가 Pulse Cloud와 Pulse OS를 제공합니다.
+현재 버전은 **v1.5.1**입니다. Python/Flask 단일 서버가 Pulse Cloud와 Pulse OS를 제공합니다.
 
 ## 설치 및 최초 로그인
 
@@ -120,7 +120,7 @@ HTTPS 페이지에서는 HTTP noVNC 연결을 차단하고 안내합니다. 외�
 | `pulse_files.py` | 경로 검증, 폴더·파일·휴지통·썸네일 API |
 | `public/js/pulse.js` | 로그인, 공통 대화상자, 아이콘과 화면 높이 관리 |
 | `public/js/app.js` | Cloud·OS 화면과 앱 동작 |
-| `process.sh` | 프로젝트 프로세스 식별 |
+| `process.sh`, `processctl.py` | 프로젝트 경로·실행 인자 확인 및 서버·리로더 종료 |
 | `uploads/` | 기본 보관함 (`STORAGE_PATH`로 변경 가능) |
 
 운영 환경 상세 설정은 [guide_termux.md](guide_termux.md)를 참고하세요.

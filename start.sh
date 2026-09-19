@@ -74,16 +74,22 @@ LOCAL_IP=$(get_local_ip)
 
 # 기존 실행 중인 서버 프로세스 체크 (.server.pid 또는 포트)
 PID_FILE="$SCRIPT_DIR/.server.pid"
+if ! SERVER_PIDS=$(pulse_server_pids); then
+    echo "서버 프로세스를 확인하지 못해 중복 실행을 방지하기 위해 시작을 중단합니다."
+    exit 1
+fi
+if [ -n "$SERVER_PIDS" ]; then
+    echo "$SERVER_PIDS" | head -n 1 > "$PID_FILE"
+    echo "이미 Pulse 서버가 실행 중입니다 (PID: $SERVER_PIDS). ./stop.sh로 종료하세요."
+    exit 0
+fi
 if [ -f "$PID_FILE" ]; then
     OLD_PID=$(cat "$PID_FILE")
-    if kill -0 "$OLD_PID" 2>/dev/null && pulse_pid_matches "$OLD_PID"; then
-        echo -e "${YELLOW}[!] 이미 서버가 실행 중입니다 (PID: $OLD_PID).${NC}"
-        echo -e "    서버를 끄려면: ${CYAN}./stop.sh${NC}"
-        echo -e "    서버 상태 확인: ${CYAN}./status.sh${NC}"
-        exit 0
-    else
-        rm -f "$PID_FILE"
+    if [[ "$OLD_PID" =~ ^[0-9]+$ ]] && kill -0 "$OLD_PID" 2>/dev/null; then
+        echo "기록된 PID의 프로젝트 소속을 확인하지 못했습니다. PID 파일을 보존하고 시작을 중단합니다."
+        exit 1
     fi
+    rm -f "$PID_FILE"
 fi
 
 # 실행 명령 결정

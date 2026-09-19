@@ -39,7 +39,7 @@ fi
 
 # 기존 서버 중지
 echo -e "\n${CYAN}[*] 기존 서버 프로세스를 정리합니다...${NC}"
-./stop.sh 2>/dev/null || true
+./stop.sh
 sleep 1
 
 # 새 서버 재시작
