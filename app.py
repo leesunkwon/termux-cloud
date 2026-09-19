@@ -209,6 +209,65 @@ def add_no_cache_header(response):
     response.headers["Expires"] = "0"
     return response
 
+# 원격 Git 업데이트 확인 API (백그라운드 감지용)
+@app.route('/api/system/check-update', methods=['GET'])
+def check_update():
+    import subprocess
+    try:
+        git_dir = os.path.join(BASE_DIR, '.git')
+        if not os.path.exists(git_dir):
+            return jsonify({'success': False, 'hasUpdate': False, 'reason': 'no_git'})
+
+        # 원격 저장소 최신 상태 조회 (git fetch)
+        fetch_res = subprocess.run(
+            ['git', 'fetch', 'origin', 'main'],
+            cwd=BASE_DIR,
+            capture_output=True,
+            text=True,
+            timeout=8
+        )
+        if fetch_res.returncode != 0:
+            return jsonify({'success': True, 'hasUpdate': False, 'fetchFailed': True})
+
+        # 로컬 및 원격 최신 커밋 해시 비교
+        local_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=BASE_DIR, text=True).strip()
+        remote_hash = subprocess.check_output(['git', 'rev-parse', 'origin/main'], cwd=BASE_DIR, text=True).strip()
+
+        has_update = (local_hash != remote_hash)
+        behind_count = 0
+        latest_message = ""
+
+        if has_update:
+            try:
+                count_res = subprocess.check_output(
+                    ['git', 'rev-list', '--count', f'{local_hash}..{remote_hash}'],
+                    cwd=BASE_DIR,
+                    text=True
+                ).strip()
+                behind_count = int(count_res) if count_res.isdigit() else 1
+
+                latest_message = subprocess.check_output(
+                    ['git', 'log', '-1', '--pretty=%B', 'origin/main'],
+                    cwd=BASE_DIR,
+                    text=True
+                ).strip().split('\n')[0]
+            except Exception:
+                behind_count = 1
+                latest_message = "새로운 업데이트가 있습니다."
+
+        return jsonify({
+            'success': True,
+            'hasUpdate': has_update,
+            'behindCount': behind_count,
+            'latestMessage': latest_message,
+            'localHash': local_hash[:7] if local_hash else '',
+            'remoteHash': remote_hash[:7] if remote_hash else ''
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({'success': True, 'hasUpdate': False, 'timeout': True})
+    except Exception as e:
+        return jsonify({'success': False, 'hasUpdate': False, 'error': str(e)})
+
 # 웹 UI에서 직접 최신 코드로 업데이트하는 API (Git 기반)
 @app.route('/api/system/update', methods=['POST'])
 def system_update():
@@ -216,7 +275,7 @@ def system_update():
     try:
         # git pull 실행
         result = subprocess.run(
-            ['git', 'pull'],
+            ['git', 'pull', 'origin', 'main'],
             cwd=BASE_DIR,
             capture_output=True,
             text=True,

@@ -17,6 +17,10 @@
     activePreviewIndex: -1,
     previewableList: [],
     pendingDeleteFile: null,
+    hasUpdate: false,
+    updateInfo: null,
+    isUpdating: false,
+    bannerDismissed: false,
   };
 
   // DOM Elements
@@ -40,8 +44,18 @@
     btnListView: document.getElementById('btn-list-view'),
     refreshBtn: document.getElementById('refresh-btn'),
     serverUpdateBtn: document.getElementById('server-update-btn'),
+    updateBadgeDot: document.getElementById('update-badge-dot'),
     uploadBtn: document.getElementById('upload-btn'),
     fileInput: document.getElementById('file-input'),
+
+    // Update Notification Banner
+    updateBanner: document.getElementById('update-banner'),
+    updateBehindTag: document.getElementById('update-behind-tag'),
+    updateCommitMsg: document.getElementById('update-commit-msg'),
+    btnApplyUpdate: document.getElementById('btn-apply-update'),
+    updateBtnSpinner: document.getElementById('update-btn-spinner'),
+    updateBtnLabel: document.getElementById('update-btn-label'),
+    btnBannerClose: document.getElementById('btn-banner-close'),
 
     // Sidebar & Navigation
     sidebar: document.getElementById('sidebar'),
@@ -53,6 +67,9 @@
     countDoc: document.getElementById('count-document'),
     countAudio: document.getElementById('count-audio'),
     countOther: document.getElementById('count-other'),
+    sidebarVersionBadge: document.getElementById('sidebar-version-badge'),
+    btnManualCheck: document.getElementById('btn-manual-check'),
+    manualCheckText: document.getElementById('manual-check-text'),
 
     // Storage
     storageText: document.getElementById('storage-text'),
@@ -99,6 +116,11 @@
     applyViewMode(state.viewMode);
     fetchFiles();
     fetchStorageStats();
+
+    // 2초 후 초기 업데이트 확인, 이후 30초마다 백그라운드 감지
+    setTimeout(() => checkServerUpdate(false), 2000);
+    setInterval(() => checkServerUpdate(false), 30000);
+    window.addEventListener('focus', () => checkServerUpdate(false));
   }
 
   // ================= Event Listeners =================
@@ -153,27 +175,45 @@
       showToast('새로고침 중...');
       fetchFiles();
       fetchStorageStats();
+      checkServerUpdate(false);
     });
 
-    // Server Code Update (Git Sync)
+    // Topbar Server Update Icon Button
     if (el.serverUpdateBtn) {
-      el.serverUpdateBtn.addEventListener('click', async () => {
-        showToast('서버 최신 코드 확인 및 동기화 중...');
-        try {
-          const res = await fetch('/api/system/update', { method: 'POST' });
-          const data = await res.json();
-          if (data.success) {
-            if (data.alreadyLatest) {
-              showToast('서버가 이미 최신 상태입니다! ✓');
-            } else {
-              showToast('최신 코드가 적용되었습니다! 페이지를 새로고침합니다...');
-              setTimeout(() => window.location.reload(), 1500);
-            }
-          } else {
-            showToast('동기화 실패: ' + (data.error || data.output || '알 수 없는 오류'));
-          }
-        } catch (err) {
-          showToast('서버 업데이트 요청 실패');
+      el.serverUpdateBtn.addEventListener('click', () => {
+        if (state.hasUpdate) {
+          el.updateBanner.classList.remove('hidden');
+          state.bannerDismissed = false;
+        } else {
+          checkServerUpdate(true);
+        }
+      });
+    }
+
+    // Update Notification Banner Actions
+    if (el.btnApplyUpdate) {
+      el.btnApplyUpdate.addEventListener('click', applyServerUpdate);
+    }
+
+    if (el.btnBannerClose) {
+      el.btnBannerClose.addEventListener('click', () => {
+        el.updateBanner.classList.add('hidden');
+        state.bannerDismissed = true;
+      });
+    }
+
+    // Sidebar Manual Check
+    if (el.btnManualCheck) {
+      el.btnManualCheck.addEventListener('click', () => checkServerUpdate(true));
+    }
+
+    if (el.sidebarVersionBadge) {
+      el.sidebarVersionBadge.addEventListener('click', () => {
+        if (state.hasUpdate) {
+          el.updateBanner.classList.remove('hidden');
+          state.bannerDismissed = false;
+        } else {
+          checkServerUpdate(true);
         }
       });
     }
@@ -798,6 +838,131 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+
+  // ================= Server Update Detection & Apply =================
+  let isCheckingUpdate = false;
+
+  async function checkServerUpdate(isManual = false) {
+    if (isCheckingUpdate || state.isUpdating) return;
+    isCheckingUpdate = true;
+
+    if (isManual) {
+      if (el.btnManualCheck) {
+        const icon = el.btnManualCheck.querySelector('.check-icon');
+        if (icon) icon.classList.add('spinning');
+        if (el.manualCheckText) el.manualCheckText.textContent = '확인 중...';
+      }
+      if (el.sidebarVersionBadge) {
+        el.sidebarVersionBadge.className = 'version-badge checking';
+        el.sidebarVersionBadge.textContent = '확인 중...';
+      }
+    }
+
+    try {
+      const res = await fetch('/api/system/check-update');
+      const data = await res.json();
+
+      if (data.success && data.hasUpdate) {
+        state.hasUpdate = true;
+        state.updateInfo = data;
+
+        // 탑바 버튼 뱃지 표시
+        if (el.updateBadgeDot) el.updateBadgeDot.classList.remove('hidden');
+
+        // 사이드바 상태 표시
+        if (el.sidebarVersionBadge) {
+          el.sidebarVersionBadge.className = 'version-badge has-update';
+          el.sidebarVersionBadge.textContent = '새 업데이트 발견!';
+          el.sidebarVersionBadge.title = '클릭하여 업데이트 배너 열기';
+        }
+
+        // 상단 배너 표시 (사용자가 수동으로 닫지 않았거나, 수동 점검인 경우)
+        if (!state.bannerDismissed || isManual) {
+          state.bannerDismissed = false;
+          if (el.updateBehindTag) {
+            el.updateBehindTag.textContent = `${data.behindCount || 1}개 커밋 차이`;
+          }
+          if (el.updateCommitMsg) {
+            el.updateCommitMsg.textContent = data.latestMessage
+              ? `최신 변경: "${data.latestMessage}"`
+              : '새로운 기능 및 버그 수정 코드가 등록되었습니다.';
+          }
+          if (el.updateBanner) {
+            el.updateBanner.classList.remove('hidden');
+          }
+        }
+
+        if (isManual) {
+          showToast(`✨ 새로운 서버 업데이트가 발견되었습니다! (${data.behindCount || 1}개 커밋)`);
+        }
+      } else {
+        // 업데이트 없음 (최신 상태)
+        state.hasUpdate = false;
+        state.updateInfo = null;
+
+        if (el.updateBadgeDot) el.updateBadgeDot.classList.add('hidden');
+        if (el.updateBanner) el.updateBanner.classList.add('hidden');
+
+        if (el.sidebarVersionBadge) {
+          el.sidebarVersionBadge.className = 'version-badge latest';
+          el.sidebarVersionBadge.textContent = '최신 상태 ✓';
+          el.sidebarVersionBadge.title = '서버가 최신 버전입니다.';
+        }
+
+        if (isManual) {
+          showToast('✓ 현재 최신 버전의 서버 코드를 실행 중입니다.');
+        }
+      }
+    } catch (err) {
+      console.warn('Update check failed:', err);
+      if (isManual) {
+        showToast('업데이트 확인 실패 (인터넷 연결을 확인하세요)');
+      }
+    } finally {
+      isCheckingUpdate = false;
+      if (el.btnManualCheck) {
+        const icon = el.btnManualCheck.querySelector('.check-icon');
+        if (icon) icon.classList.remove('spinning');
+        if (el.manualCheckText) el.manualCheckText.textContent = '업데이트 확인';
+      }
+    }
+  }
+
+  async function applyServerUpdate() {
+    if (state.isUpdating) return;
+    state.isUpdating = true;
+
+    if (el.btnApplyUpdate) el.btnApplyUpdate.disabled = true;
+    if (el.updateBtnSpinner) el.updateBtnSpinner.classList.remove('hidden');
+    if (el.updateBtnLabel) el.updateBtnLabel.textContent = '코드 동기화 중...';
+
+    showToast('🚀 GitHub에서 최신 코드를 다운로드하여 적용하는 중...');
+
+    try {
+      const res = await fetch('/api/system/update', { method: 'POST' });
+      const data = await res.json();
+
+      if (data.success) {
+        if (el.updateBtnLabel) el.updateBtnLabel.textContent = '적용 완료!';
+        showToast('🎉 최신 코드가 적용되었습니다! 페이지를 새로고침합니다...');
+        setTimeout(() => {
+          window.location.reload();
+        }, 1200);
+      } else {
+        state.isUpdating = false;
+        if (el.btnApplyUpdate) el.btnApplyUpdate.disabled = false;
+        if (el.updateBtnSpinner) el.updateBtnSpinner.classList.add('hidden');
+        if (el.updateBtnLabel) el.updateBtnLabel.textContent = '다시 시도';
+        showToast('업데이트 실패: ' + (data.error || data.output || '알 수 없는 오류'));
+      }
+    } catch (err) {
+      state.isUpdating = false;
+      if (el.btnApplyUpdate) el.btnApplyUpdate.disabled = false;
+      if (el.updateBtnSpinner) el.updateBtnSpinner.classList.add('hidden');
+      if (el.updateBtnLabel) el.updateBtnLabel.textContent = '다시 시도';
+      showToast('서버 업데이트 요청 중 통신 오류가 발생했습니다.');
+    }
   }
 
   // Start app

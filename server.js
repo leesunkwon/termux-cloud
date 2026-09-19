@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { exec } = require('child_process');
 const mime = require('mime-types');
 
 const app = express();
@@ -245,8 +246,68 @@ app.get('/api/storage', (req, res) => {
       storagePath: STORAGE_DIR
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+// 원격 Git 업데이트 확인 API
+app.get('/api/system/check-update', (req, res) => {
+  const gitDir = path.join(__dirname, '.git');
+  if (!fs.existsSync(gitDir)) {
+    return res.json({ success: false, hasUpdate: false, reason: 'no_git' });
   }
+
+  exec('git fetch origin main', { cwd: __dirname, timeout: 8000 }, (fetchErr) => {
+    if (fetchErr) {
+      return res.json({ success: true, hasUpdate: false, fetchFailed: true });
+    }
+
+    exec('git rev-parse HEAD && git rev-parse origin/main', { cwd: __dirname }, (hashErr, stdout) => {
+      if (hashErr) {
+        return res.json({ success: false, hasUpdate: false, error: hashErr.message });
+      }
+
+      const hashes = stdout.trim().split('\n');
+      const localHash = (hashes[0] || '').trim();
+      const remoteHash = (hashes[1] || '').trim();
+      const hasUpdate = (localHash !== remoteHash);
+
+      if (!hasUpdate) {
+        return res.json({ success: true, hasUpdate: false, localHash: localHash.slice(0, 7) });
+      }
+
+      exec(`git rev-list --count ${localHash}..${remoteHash} && git log -1 --pretty=%B origin/main`, { cwd: __dirname }, (infoErr, infoStdout) => {
+        let behindCount = 1;
+        let latestMessage = '새로운 업데이트가 있습니다.';
+
+        if (!infoErr && infoStdout) {
+          const lines = infoStdout.trim().split('\n');
+          behindCount = parseInt(lines[0], 10) || 1;
+          latestMessage = (lines[1] || '').trim() || latestMessage;
+        }
+
+        res.json({
+          success: true,
+          hasUpdate: true,
+          behindCount: behindCount,
+          latestMessage: latestMessage,
+          localHash: localHash.slice(0, 7),
+          remoteHash: remoteHash.slice(0, 7)
+        });
+      });
+    });
+  });
+});
+
+// 웹 UI에서 직접 최신 코드로 업데이트하는 API
+app.post('/api/system/update', (req, res) => {
+  exec('git pull origin main', { cwd: __dirname, timeout: 30000 }, (err, stdout, stderr) => {
+    const output = (stdout || '') + (stderr || '');
+    const isAlreadyLatest = output.includes('Already up to date.') || output.includes('이미 최신 상태입니다');
+
+    res.json({
+      success: !err,
+      output: output.trim(),
+      alreadyLatest: isAlreadyLatest,
+      error: err ? err.message : null
+    });
+  });
 });
 
 function getLocalIp() {

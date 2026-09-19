@@ -114,6 +114,20 @@
           계산 중...
         </div>
       </div>
+
+      <!-- 서버 버전 및 업데이트 위젯 -->
+      <div class="sidebar-version-wrap">
+        <div class="version-status-row">
+          <span class="version-label">서버 버전</span>
+          <span class="version-badge latest" id="sidebar-version-badge">최신 상태 ✓</span>
+        </div>
+        <button class="btn-check-update" id="btn-manual-check" title="지금 원격 저장소 업데이트 확인">
+          <svg class="check-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+          </svg>
+          <span id="manual-check-text">업데이트 확인</span>
+        </button>
+      </div>
     </aside>
 
     <!-- 메인 컨텐츠 영역 -->
@@ -189,6 +203,7 @@
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
             </svg>
+            <span class="badge-dot hidden" id="update-badge-dot"></span>
           </button>
 
           <!-- 파일 업로드 메인 버튼 -->
@@ -203,6 +218,36 @@
           <input type="file" id="file-input" multiple style="display: none;">
         </div>
       </header>
+
+      <!-- ✨ 실시간 코드 업데이트 감지 알림 배너 (Apple Dynamic Island 스타일) -->
+      <section class="update-banner hidden" id="update-banner">
+        <div class="update-banner-card">
+          <div class="update-banner-left">
+            <div class="update-pulse-icon">
+              <span class="pulse-ring"></span>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+            </div>
+            <div class="update-info-text">
+              <div class="update-title-row">
+                <span class="update-title">새로운 서버 업데이트 감지</span>
+                <span class="update-tag" id="update-behind-tag">새 커밋 발견</span>
+              </div>
+              <p class="update-commit-msg" id="update-commit-msg">GitHub에 새로운 코드가 등록되었습니다.</p>
+            </div>
+          </div>
+          <div class="update-banner-actions">
+            <button class="btn btn-apply-update" id="btn-apply-update">
+              <svg class="update-spinner-icon hidden" id="update-btn-spinner" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
+              <span id="update-btn-label">지금 업데이트 적용</span>
+            </button>
+            <button class="btn-banner-close" id="btn-banner-close" title="알림 닫기" aria-label="닫기">✕</button>
+          </div>
+        </div>
+      </section>
 
       <!-- 툴바 아래 안내 배너 / 드롭 안내 -->
       <section class="banner-hint" id="banner-hint">
