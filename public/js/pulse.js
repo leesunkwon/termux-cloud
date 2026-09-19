@@ -62,8 +62,13 @@ window.Pulse = (() => {
       field.onkeydown = event => {
         if (event.key === 'Enter') { event.preventDefault(); form.requestSubmit(document.getElementById('pulse-dialog-ok')); }
       };
-      document.getElementById('pulse-dialog-ok').textContent = confirm;
-      document.getElementById('pulse-dialog-cancel').hidden = !cancel;
+      const okBtn = document.getElementById('pulse-dialog-ok');
+      const cancelBtn = document.getElementById('pulse-dialog-cancel');
+      okBtn.textContent = confirm;
+      const isDanger = confirm.includes('삭제') || confirm.includes('버리기') || confirm.includes('초기화');
+      okBtn.className = isDanger ? 'btn btn-danger' : 'btn btn-primary';
+      cancelBtn.hidden = !cancel;
+      cancelBtn.className = 'btn btn-secondary';
       let result = null;
       form.onsubmit = event => {
         event.preventDefault();

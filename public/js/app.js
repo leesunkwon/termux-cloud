@@ -841,7 +841,10 @@
       if (action === 'up') button.disabled = !state.folder;
       if (action === 'rename') button.disabled = state.selected.size !== 1;
       if (['move', 'delete'].includes(action)) button.disabled = !state.selected.size;
-      if (action === 'select') button.textContent = state.selected.size ? `선택 해제 (${state.selected.size})` : '페이지 전체 선택';
+      if (action === 'select') {
+        const label = button.querySelector('.btn-label') || button;
+        label.textContent = state.selected.size ? `선택 해제 (${state.selected.size})` : '전체 선택';
+      }
     });
   }
   async function fileAction(action) {
@@ -868,65 +871,128 @@
         const name = await Pulse.ask('새 이름', { input: true, value: source.split('/').pop() });
         if (!name) return;
         if (name.includes('/') || name.includes('\\')) throw new Error('이름에 경로 구분자를 사용할 수 없습니다.');
-        const parent = source.split('/').slice(0, -1).join('/');
-        await Pulse.post('/api/files/move', { source, destination: parent ? `${parent}/${name}` : name });
+        await Pulse.post('/api/rename', { oldPath: source, newName: name });
       }
-      if (action === 'move' || action === 'delete') {
-        const paths = [...state.selected];
-        let folder = '';
-        if (action === 'move') {
-          folder = await Pulse.ask('이동할 폴더 경로를 입력하세요. 보관함 최상위로 이동하려면 비워두세요. 폴더는 먼저 생성해야 합니다.', { input: true });
-          if (folder === null) return;
-          folder = folder.trim().replace(/^\/+|\/+$/g, '');
-        } else if (!await Pulse.ask(`${paths.length}개 항목을 휴지통으로 옮길까요?`, { confirm: '휴지통으로 이동' })) return;
-        let completed = 0;
-        const failed = [];
-        for (const source of paths) {
-          try {
-            if (action === 'delete') await Pulse.api('/api/files/' + encodeURIComponent(source), { method: 'DELETE' });
-            else await Pulse.post('/api/files/move', { source, destination: (folder ? folder + '/' : '') + source.split('/').pop() });
-            completed++;
-          } catch (error) { failed.push(`${source}: ${error.message}`); }
-        }
-        if (failed.length) await Pulse.ask(`${completed}개 완료, ${failed.length}개 실패\n${failed.join('\n')}`, { cancel: false });
-        else showToast(`${completed}개 항목을 ${action === 'delete' ? '휴지통으로 옮겼습니다.' : '이동했습니다.'}`);
+      if (action === 'move') {
+        const target = await Pulse.ask('이동할 대상 폴더 (비워두면 최상위 폴더)', { input: true });
+        if (target === null) return;
+        await Pulse.post('/api/move', { paths: [...state.selected], destination: target.trim() });
       }
+      if (action === 'delete') {
+        if (!await Pulse.ask(`선택한 ${state.selected.size}개 항목을 휴지통으로 이동할까요?`, { confirm: '휴지통 이동' })) return;
+        await Pulse.post('/api/batch/delete', { paths: [...state.selected] });
+      }
+      state.selected.clear();
       await fetchFiles();
+      if (typeof renderFinderFiles === 'function') renderFinderFiles();
       fetchStorageStats();
-    } catch (error) { showToast(error.message, () => fileAction(action)); }
+      fetchDashboardData(true);
+      showToast('작업을 완료했습니다.');
+    } catch (error) {
+      await Pulse.ask(error.message, { cancel: false });
+    }
   }
-  async function restoreTrash(id) {
-    try { await Pulse.post(`/api/trash/${id}/restore`); await fetchFiles(); fetchStorageStats(); showToast('복원했습니다.'); }
-    catch (error) { showToast(error.message, () => restoreTrash(id)); }
-  }
+  const fileActionMeta = {
+    home: {
+      text: '보관함',
+      cls: 'btn btn-secondary btn-file-nav',
+      icon: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>'
+    },
+    up: {
+      text: '상위 폴더',
+      cls: 'btn btn-secondary btn-file-nav',
+      icon: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>'
+    },
+    mkdir: {
+      text: '새 폴더',
+      cls: 'btn btn-primary btn-file-create',
+      icon: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>'
+    },
+    select: {
+      text: '전체 선택',
+      cls: 'btn btn-outline btn-file-util',
+      icon: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>'
+    },
+    rename: {
+      text: '이름 변경',
+      cls: 'btn btn-outline btn-file-util',
+      icon: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
+    },
+    move: {
+      text: '이동',
+      cls: 'btn btn-outline btn-file-util',
+      icon: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>'
+    },
+    delete: {
+      text: '휴지통 이동',
+      cls: 'btn btn-danger-subtle btn-file-danger',
+      icon: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>'
+    },
+    trash: {
+      text: '휴지통',
+      cls: 'btn btn-outline btn-file-trash',
+      icon: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>'
+    },
+    prev: {
+      text: '이전',
+      cls: 'btn btn-secondary btn-pager',
+      icon: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>'
+    },
+    next: {
+      text: '다음',
+      cls: 'btn btn-secondary btn-pager',
+      icon: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>'
+    }
+  };
   async function openTrash() {
     const data = await Pulse.api('/api/trash');
     const dialog = document.getElementById('pulse-trash');
     const list = document.getElementById('pulse-trash-list');
     list.replaceChildren();
-    if (!data.items.length) list.textContent = '휴지통이 비어 있습니다.';
+    if (!data.items.length) {
+      list.innerHTML = '<div class="pulse-trash-empty">휴지통이 비어 있습니다.</div>';
+    }
     for (const item of data.items) {
       const row = document.createElement('div');
       row.className = 'pulse-trash-row';
       const name = document.createElement('span');
+      name.className = 'pulse-trash-name';
       name.textContent = item.path;
       row.appendChild(name);
-      for (const restore of [true, false]) {
-        const button = document.createElement('button');
-        button.className = 'btn btn-outline';
-        button.textContent = restore ? '복원' : '영구 삭제';
-        button.addEventListener('click', async () => {
-          if (!restore && !await Pulse.ask(`'${item.path}'을 영구 삭제할까요? 복구할 수 없습니다.`, { confirm: '영구 삭제' })) return;
-          button.disabled = true;
-          try {
-            if (restore) await Pulse.post(`/api/trash/${item.id}/restore`);
-            else await Pulse.api(`/api/trash/${item.id}`, { method: 'DELETE' });
-            await openTrash(); await fetchFiles(); fetchStorageStats();
-          } catch (error) { await Pulse.ask(error.message, { cancel: false }); }
-          finally { button.disabled = false; }
-        });
-        row.appendChild(button);
-      }
+
+      const actionGroup = document.createElement('div');
+      actionGroup.className = 'pulse-trash-actions';
+
+      const restoreBtn = document.createElement('button');
+      restoreBtn.className = 'btn btn-success btn-trash-restore';
+      restoreBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg><span>복원</span>';
+      restoreBtn.addEventListener('click', async () => {
+        restoreBtn.disabled = true;
+        try {
+          await Pulse.post(`/api/trash/${item.id}/restore`);
+          await openTrash(); await fetchFiles(); fetchStorageStats();
+          showToast('파일을 복원했습니다.');
+        } catch (error) { await Pulse.ask(error.message, { cancel: false }); }
+        finally { restoreBtn.disabled = false; }
+      });
+      actionGroup.appendChild(restoreBtn);
+
+      const purgeBtn = document.createElement('button');
+      purgeBtn.className = 'btn btn-danger btn-trash-purge';
+      purgeBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><span>영구 삭제</span>';
+      purgeBtn.addEventListener('click', async () => {
+        if (!await Pulse.ask(`'${item.path}'을 영구 삭제할까요? 이 작업은 되돌릴 수 없습니다.`, { confirm: '영구 삭제' })) return;
+        purgeBtn.disabled = true;
+        try {
+          await Pulse.api(`/api/trash/${item.id}`, { method: 'DELETE' });
+          await openTrash(); await fetchFiles(); fetchStorageStats();
+          showToast('영구 삭제되었습니다.');
+        } catch (error) { await Pulse.ask(error.message, { cancel: false }); }
+        finally { purgeBtn.disabled = false; }
+      });
+      actionGroup.appendChild(purgeBtn);
+
+      row.appendChild(actionGroup);
       list.appendChild(row);
     }
     if (!dialog.open) dialog.showModal();
@@ -934,9 +1000,9 @@
   function setupFileTools() {
     const dialog = document.createElement('dialog');
     dialog.id = 'pulse-trash';
-    dialog.className = 'pulse-dialog';
+    dialog.className = 'pulse-dialog pulse-trash-dialog';
     dialog.setAttribute('aria-label', '휴지통');
-    dialog.innerHTML = '<h2>휴지통</h2><p>영구 삭제 전까지 저장 공간을 사용합니다.</p><div id="pulse-trash-list"></div><form method="dialog"><button class="btn btn-primary">닫기</button></form>';
+    dialog.innerHTML = '<div class="pulse-trash-header"><h2>♻️ 휴지통</h2><p>영구 삭제 전까지 저장 공간을 사용합니다.</p></div><div id="pulse-trash-list"></div><form method="dialog" class="pulse-trash-footer"><button class="btn btn-secondary">닫기</button></form>';
     document.body.appendChild(dialog);
     const targets = [document.getElementById('file-grid').parentElement, document.querySelector('.finder-content')];
     targets.forEach(target => {
@@ -947,11 +1013,11 @@
       toolbar.appendChild(path);
       const pager = document.createElement('div');
       pager.className = 'pulse-pagination';
-      for (const [action, text] of Object.entries({ home: '보관함', up: '상위 폴더', mkdir: '새 폴더', select: '페이지 전체 선택', rename: '이름 변경', move: '이동', delete: '휴지통 이동', trash: '휴지통', prev: '이전', next: '다음' })) {
+      for (const [action, meta] of Object.entries(fileActionMeta)) {
         const button = document.createElement('button');
-        button.className = 'btn btn-outline';
+        button.className = meta.cls;
         button.dataset.fileAction = action;
-        button.textContent = text;
+        button.innerHTML = `<span class="btn-icon" aria-hidden="true">${meta.icon}</span><span class="btn-label">${meta.text}</span>`;
         if (!['home', 'up', 'prev', 'next'].includes(action)) button.setAttribute('data-admin', '');
         button.addEventListener('click', async () => {
           button.disabled = true;
