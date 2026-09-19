@@ -25,6 +25,7 @@ if [ ! -d "/data/data/com.termux" ]; then
 fi
 
 ACTION="${1:-start}"
+VNC_PORT="${VNC_PORT:-6080}"
 
 case "$ACTION" in
     install)
@@ -52,10 +53,9 @@ EOF
 
     start)
         # 패키지 설치 여부 점검
-        if ! command -v vncserver &> /dev/null || ! command -v novnc &> /dev/null; then
+        if ! command -v vncserver &> /dev/null || ! command -v novnc_proxy &> /dev/null; then
             echo -e "${YELLOW}필수 패키지가 설치되지 않았습니다. 자동 설치를 시작합니다...${NC}"
-            exec "$0" install
-            exit 0
+            "$0" install
         fi
 
         echo -e "\n${BLUE}1. VNC 서버 시작 (디스플레이 :1)...${NC}"
@@ -70,12 +70,12 @@ EOF
         pkill -f "websockify.*6080" 2>/dev/null || true
 
         # novnc_proxy 백그라운드 실행
-        nohup novnc_proxy --vnc localhost:5901 --listen 6080 > "$HOME/.vnc/novnc.log" 2>&1 &
+        nohup novnc_proxy --vnc localhost:5901 --listen "$VNC_PORT" > "$HOME/.vnc/novnc.log" 2>&1 &
         sleep 2
 
         echo -e "\n${GREEN}======================================================${NC}"
         echo -e "${GREEN}  ✓ 가상 리눅스 데스크탑이 성공적으로 실행되었습니다!   ${NC}"
-        echo -e "  🌐 브라우저 접속 주소 : http://localhost:6080/vnc.html"
+        echo -e "  🌐 브라우저 접속 주소 : http://localhost:${VNC_PORT}/vnc.html"
         echo -e "  💻 웹 가상 데스크탑의 [리눅스 GUI] 창에서 즉시 사용 가능"
         echo -e "${GREEN}======================================================${NC}"
         echo -e "종료하려면: ${YELLOW}./setup-desktop.sh stop${NC}\n"
@@ -98,7 +98,7 @@ EOF
         ;;
 
     *)
-        echo "사용법: $0 {start|stop|restart|status|install}"
+        echo "사용법: $0 {start|stop|status|install}"
         exit 1
         ;;
 esac

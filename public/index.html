@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Pulse — Pulse Cloud & Pulse OS</title>
   <link rel="icon" type="image/png" href="assets/pulse-icon.png">
   <link rel="apple-touch-icon" href="assets/pulse-icon.png">
@@ -11,7 +11,29 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700&family=Pretendard:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body>
+<body data-role="viewer">
+  <dialog id="pulse-login" class="pulse-dialog login-dialog" aria-labelledby="login-title">
+    <form id="pulse-login-form">
+      <img src="assets/pulse-icon.png" width="56" height="56" alt="">
+      <h2 id="login-title">Pulse에 로그인</h2>
+      <p>내 스마트폰의 파일과 데스크톱에 안전하게 접속하세요.</p>
+      <label>계정<input id="login-user" autocomplete="username" required maxlength="64"></label>
+      <label>비밀번호<input id="login-password" type="password" autocomplete="current-password" required maxlength="1024"></label>
+      <p id="login-error" role="alert"></p>
+      <button class="btn btn-primary" type="submit">로그인</button>
+    </form>
+  </dialog>
+  <dialog id="pulse-dialog" class="pulse-dialog" aria-labelledby="pulse-dialog-message">
+    <form>
+      <p id="pulse-dialog-message"></p>
+      <input id="pulse-dialog-input" aria-label="입력 값" hidden>
+      <div class="pulse-dialog-actions">
+        <button id="pulse-dialog-cancel" class="btn btn-secondary" value="cancel">취소</button>
+        <button id="pulse-dialog-ok" class="btn btn-primary" value="ok">확인</button>
+      </div>
+    </form>
+  </dialog>
+  <div class="pulse-account-bar"><span id="pulse-account">연결 중</span><button id="pulse-logout" class="btn btn-outline">로그아웃</button></div>
   <!-- 드롭존 오버레이 -->
   <div id="drop-overlay" class="drop-overlay hidden">
     <div class="drop-modal">
@@ -64,7 +86,7 @@
       </div>
 
       <!-- 서버 최신 코드 업데이트 버튼 -->
-      <button class="icon-btn" id="server-update-btn" title="원격 업데이트 확인 및 동기화">
+      <button class="icon-btn" id="server-update-btn" data-admin title="원격 업데이트 확인 및 동기화">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
         </svg>
@@ -103,7 +125,7 @@
         </div>
       </div>
       <div class="update-banner-actions">
-        <button class="btn btn-apply-update" id="btn-apply-update">
+        <button class="btn btn-apply-update" id="btn-apply-update" data-admin>
           <svg class="update-spinner-icon hidden" id="update-btn-spinner" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
           <span id="update-btn-label">지금 업데이트 적용</span>
         </button>
@@ -239,13 +261,13 @@
         </div>
         <div class="footer-chip">
           <span class="chip-label">현재 버전</span>
-          <span class="chip-val" id="portal-ver-val">v1.2.0</span>
+          <span class="chip-val" id="portal-ver-val">버전 확인 중</span>
         </div>
         <div class="footer-chip">
           <span class="chip-label">업데이트 상태</span>
-          <span class="chip-val green" id="portal-update-status">최신 버전 ✓</span>
+          <span class="chip-val green" id="portal-update-status">업데이트 확인 전</span>
         </div>
-        <button class="footer-changelog-btn" id="portal-changelog-btn">
+        <button class="footer-changelog-btn" id="portal-changelog-btn" data-admin>
           📋 릴리즈 로그 보기
         </button>
       </div>
@@ -324,7 +346,7 @@
         <div class="sidebar-storage">
           <div class="storage-title">
             <span>Pulse Cloud 저장 공간</span>
-            <span class="storage-badge"><span class="pulse-dot"></span> Termux 구동중</span>
+            <span class="storage-badge"><span class="pulse-dot"></span> 개인 보관함</span>
           </div>
           <div class="storage-bar">
             <div class="storage-segment seg-photos" id="seg-photos" style="width: 0%"></div>
@@ -347,9 +369,9 @@
         <div class="sidebar-version-wrap">
           <div class="version-status-row">
             <span class="version-label">서버 버전</span>
-            <span class="version-badge latest" id="sidebar-version-badge">v1.2.0 최신</span>
+            <span class="version-badge latest" id="sidebar-version-badge">업데이트 확인 전</span>
           </div>
-          <button class="btn-check-update" id="btn-manual-check" title="지금 원격 저장소 업데이트 확인">
+          <button class="btn-check-update" id="btn-manual-check" data-admin title="지금 원격 저장소 업데이트 확인">
             <svg class="check-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
             </svg>
@@ -419,7 +441,7 @@
             </div>
 
             <!-- 파일 업로드 메인 버튼 -->
-            <button class="btn btn-primary" id="upload-btn">
+            <button class="btn btn-primary" id="upload-btn" data-admin>
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -454,7 +476,7 @@
             </div>
             <h3 id="empty-title">파일이 없습니다</h3>
             <p id="empty-desc">상단의 <strong>업로드</strong> 버튼을 누르거나 파일을 이곳에 드롭하세요.</p>
-            <button class="btn btn-outline" id="empty-upload-btn">파일 선택하기</button>
+            <button class="btn btn-outline" id="empty-upload-btn" data-admin>파일 선택하기</button>
           </div>
 
           <!-- 파일 격자 뷰 -->
@@ -502,7 +524,7 @@
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             <span>상태 새로고침</span>
           </button>
-          <button class="btn btn-dash-update" id="btn-dash-update">
+          <button class="btn btn-dash-update" id="btn-dash-update" data-admin>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             <span>업데이트 확인</span>
           </button>
@@ -575,11 +597,11 @@
             <span class="metric-title">스마트폰 배터리</span>
           </div>
           <div class="metric-value-row">
-            <span class="metric-main-val" id="metric-battery-val">100%</span>
+            <span class="metric-main-val" id="metric-battery-val">측정 중</span>
             <span class="metric-sub-val" id="metric-battery-status">충전 중</span>
           </div>
           <div class="progress-bar-bg">
-            <div class="progress-bar-fill fill-green" id="metric-battery-bar" style="width: 100%"></div>
+            <div class="progress-bar-fill fill-green" id="metric-battery-bar" style="width: 0%"></div>
           </div>
           <div class="metric-footer-text" id="metric-battery-detail">24시간 안정 구동 전원</div>
         </div>
@@ -658,7 +680,7 @@
               <span class="dash-card-icon">📋</span>
               <h3 class="dash-card-title">버전 관리 & 업데이트 변경 내역</h3>
             </div>
-            <span class="badge-pill green" id="dash-version-pill">v1.2.0</span>
+            <span class="badge-pill green" id="dash-version-pill">버전 확인 중</span>
           </div>
 
           <div class="changelog-preview-box" id="dash-changelog-list">
@@ -667,10 +689,10 @@
           </div>
 
           <div class="dash-card-footer-btns">
-            <button class="btn btn-outline" id="btn-open-full-changelog">
+            <button class="btn btn-outline" id="btn-open-full-changelog" data-admin>
               <span>릴리즈 노트 전문 보기</span>
             </button>
-            <button class="btn btn-primary" id="btn-trigger-update">
+            <button class="btn btn-primary" id="btn-trigger-update" data-admin>
               <span>최신 코드 확인 및 적용</span>
             </button>
           </div>
@@ -693,7 +715,7 @@
           <span class="menubar-app-title" id="desktop-active-app-name">Pulse OS</span>
           <div class="menubar-menus">
             <span class="menubar-item" id="menu-item-files" data-action="open-finder">파일</span>
-            <span class="menubar-item" id="menu-item-terminal" data-action="open-terminal">Pulse 터미널</span>
+            <span class="menubar-item" id="menu-item-terminal" data-action="open-terminal" data-admin>Pulse 터미널</span>
             <span class="menubar-item" id="menu-item-editor" data-action="open-editor">코드 편집</span>
             <span class="menubar-item" id="menu-item-monitor" data-action="open-monitor">모니터</span>
           </div>
@@ -708,7 +730,7 @@
 
           <!-- 배터리 상태 -->
           <div class="menubar-status-item" id="menubar-battery-badge" title="스마트폰 배터리">
-            <span id="menubar-battery-pct">100%</span>
+            <span id="menubar-battery-pct">—</span>
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="18" height="12" rx="2" ry="2"></rect><line x1="23" y1="13" x2="23" y2="11"></line><rect x="3" y="8" width="12" height="8" rx="1" ry="1" fill="currentColor"></rect></svg>
           </div>
 
@@ -727,9 +749,10 @@
       <!-- 2. 데스크탑 캔버스 (바탕화면) -->
       <div class="desktop-canvas" id="desktop-canvas">
         <!-- 바탕화면 앱 아이콘 바로가기 그리드 -->
+        <div class="desktop-welcome"><h2>Pulse OS</h2><p>앱을 선택해 시작하세요.</p></div>
         <div class="desktop-icons-grid">
           <!-- 터미널 바로가기 -->
-          <div class="desktop-shortcut" data-app="terminal" tabindex="0" title="Pulse 터미널 열기">
+          <div class="desktop-shortcut" data-app="terminal" data-admin tabindex="0" title="Pulse 터미널 열기">
             <div class="shortcut-icon icon-bg-black">
               <span class="shortcut-symbol">💻</span>
             </div>
@@ -769,7 +792,7 @@
           </div>
 
           <!-- 리눅스 GUI (noVNC) 바로가기 -->
-          <div class="desktop-shortcut" data-app="linux" tabindex="0" title="Termux XFCE4 데스크탑 GUI 연동">
+          <div class="desktop-shortcut" data-app="linux" data-admin tabindex="0" title="Termux XFCE4 데스크탑 GUI 연동">
             <div class="shortcut-icon icon-bg-purple">
               <span class="shortcut-symbol">🐧</span>
             </div>
@@ -787,12 +810,12 @@
 
         <!-- 3. 멀티 윈도우 레이어 -->
         <!-- [창 1: 터미널] -->
-        <div class="desktop-window window-dark hidden" id="win-terminal" data-app="terminal">
+        <div class="desktop-window window-dark hidden" id="win-terminal" data-app="terminal" data-admin>
           <div class="window-header">
             <div class="window-traffic-lights">
-              <button class="traffic-light btn-close" data-app="terminal"></button>
-              <button class="traffic-light btn-min" data-app="terminal"></button>
-              <button class="traffic-light btn-max" data-app="terminal"></button>
+              <button class="traffic-light btn-close" data-app="terminal" data-admin></button>
+              <button class="traffic-light btn-min" data-app="terminal" data-admin></button>
+              <button class="traffic-light btn-max" data-app="terminal" data-admin></button>
             </div>
             <div class="window-title">
               <span class="win-title-icon">💻</span>
@@ -812,6 +835,7 @@
               <button class="preset-cmd-btn" data-cmd="git status">git status</button>
               <button class="preset-cmd-btn" data-cmd="termux-battery-status">배터리</button>
             </div>
+            <div id="terminal-status" class="terminal-status" role="status">대기 중 · 명령당 최대 15초 · 대화형 입력 미지원</div>
             <div class="terminal-output" id="terminal-output">
               <div class="term-line term-welcome">⚡ Pulse OS</div>
               <div class="term-line term-info">Pulse 터미널이 준비되었습니다.</div>
@@ -839,7 +863,7 @@
               <span class="win-title-text">Pulse 파일 — 내 보관함</span>
             </div>
             <div class="window-header-actions">
-              <button class="win-btn-sm" id="btn-finder-new-file">+ 새 파일</button>
+              <button class="win-btn-sm" id="btn-finder-new-file" data-admin>+ 새 파일</button>
               <button class="win-btn-sm" id="btn-finder-refresh">새로고침</button>
             </div>
           </div>
@@ -877,7 +901,7 @@
               <span class="win-title-text" id="editor-win-title">Pulse 에디터 — Untitled.txt</span>
             </div>
             <div class="window-header-actions">
-              <button class="win-btn-sm btn-primary-sm" id="btn-editor-save">💾 저장</button>
+              <button class="win-btn-sm btn-primary-sm" id="btn-editor-save" data-admin>💾 저장</button>
             </div>
           </div>
           <div class="window-body editor-body">
@@ -943,12 +967,12 @@
               <div class="monitor-card">
                 <div class="monitor-card-header">
                   <span class="monitor-card-label">스마트폰 배터리</span>
-                  <span class="monitor-card-val" id="mon-bat-pct">100%</span>
+                  <span class="monitor-card-val" id="mon-bat-pct">측정 중</span>
                 </div>
                 <div class="monitor-progress-track">
-                  <div class="monitor-progress-bar green" id="mon-bat-bar" style="width: 100%"></div>
+                  <div class="monitor-progress-bar green" id="mon-bat-bar" style="width: 0%"></div>
                 </div>
-                <div class="monitor-subtext" id="mon-bat-detail">상태: 정상</div>
+                <div class="monitor-subtext" id="mon-bat-detail">상태 확인 중</div>
               </div>
 
               <div class="monitor-card">
@@ -1010,12 +1034,12 @@
         </div>
 
         <!-- [창 6: 리눅스 GUI (X11 / noVNC) 데스크탑] -->
-        <div class="desktop-window hidden" id="win-linux" data-app="linux">
+        <div class="desktop-window hidden" id="win-linux" data-app="linux" data-admin>
           <div class="window-header">
             <div class="window-traffic-lights">
-              <button class="traffic-light btn-close" data-app="linux"></button>
-              <button class="traffic-light btn-min" data-app="linux"></button>
-              <button class="traffic-light btn-max" data-app="linux"></button>
+              <button class="traffic-light btn-close" data-app="linux" data-admin></button>
+              <button class="traffic-light btn-min" data-app="linux" data-admin></button>
+              <button class="traffic-light btn-max" data-app="linux" data-admin></button>
             </div>
             <div class="window-title">
               <span class="win-title-icon">🐧</span>
@@ -1171,7 +1195,7 @@
             <span class="dock-label">Pulse 파일</span>
             <span class="dock-dot hidden" data-app-dot="finder"></span>
           </button>
-          <button class="dock-item" data-app="terminal" title="Pulse 터미널">
+          <button class="dock-item" data-app="terminal" data-admin title="Pulse 터미널">
             <span class="dock-icon">💻</span>
             <span class="dock-label">Pulse 터미널</span>
             <span class="dock-dot hidden" data-app-dot="terminal"></span>
@@ -1191,7 +1215,7 @@
             <span class="dock-label">Pulse 브라우저</span>
             <span class="dock-dot hidden" data-app-dot="browser"></span>
           </button>
-          <button class="dock-item" data-app="linux" title="Linux 데스크톱 (noVNC)">
+          <button class="dock-item" data-app="linux" data-admin title="Linux 데스크톱 (noVNC)">
             <span class="dock-icon">🐧</span>
             <span class="dock-label">Linux 데스크톱</span>
             <span class="dock-dot hidden" data-app-dot="linux"></span>
@@ -1232,7 +1256,7 @@
             </svg>
             <span>다운로드</span>
           </button>
-          <button class="preview-btn btn-danger-subtle" id="preview-delete-btn" title="삭제">
+          <button class="preview-btn btn-danger-subtle" id="preview-delete-btn" data-admin title="삭제">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="3 6 5 6 21 6"></polyline>
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -1294,7 +1318,7 @@
         </svg>
       </div>
       <h3>파일 삭제</h3>
-      <p id="delete-modal-msg">정말로 이 파일을 삭제하시겠습니까? 삭제된 파일은 복구할 수 없습니다.</p>
+      <p id="delete-modal-msg">이 파일을 휴지통으로 옮길까요? 휴지통에서 복원할 수 있습니다.</p>
       <div class="delete-actions">
         <button class="btn btn-secondary" id="delete-cancel-btn">취소</button>
         <button class="btn btn-danger" id="delete-confirm-btn">삭제</button>
@@ -1320,6 +1344,7 @@
   <!-- 토스트 컨테이너 -->
   <div class="toast-container" id="toast-container"></div>
 
+  <script src="js/pulse.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

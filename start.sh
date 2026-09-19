@@ -5,7 +5,8 @@
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+cd "$SCRIPT_DIR" || exit 1
+source "$SCRIPT_DIR/process.sh"
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -39,6 +40,7 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 export PORT
+export PULSE_MANAGED=1
 
 # 디렉토리 준비
 mkdir -p uploads
@@ -74,7 +76,7 @@ LOCAL_IP=$(get_local_ip)
 PID_FILE="$SCRIPT_DIR/.server.pid"
 if [ -f "$PID_FILE" ]; then
     OLD_PID=$(cat "$PID_FILE")
-    if kill -0 "$OLD_PID" 2>/dev/null; then
+    if kill -0 "$OLD_PID" 2>/dev/null && pulse_pid_matches "$OLD_PID"; then
         echo -e "${YELLOW}[!] 이미 서버가 실행 중입니다 (PID: $OLD_PID).${NC}"
         echo -e "    서버를 끄려면: ${CYAN}./stop.sh${NC}"
         echo -e "    서버 상태 확인: ${CYAN}./status.sh${NC}"
@@ -85,28 +87,23 @@ if [ -f "$PID_FILE" ]; then
 fi
 
 # 실행 명령 결정
-SERVER_CMD=""
+SERVER_CMD=()
 if command -v python3 &>/dev/null; then
     # Flask 설치 확인
     if ! python3 -c "import flask" &>/dev/null; then
         echo -e "${CYAN}[*] Flask 설치 진행 중...${NC}"
-        pip install flask werkzeug
+        python3 -m pip install -r requirements.txt
     fi
-    SERVER_CMD="python3 app.py"
+    SERVER_CMD=(python3 "$SCRIPT_DIR/app.py")
 elif command -v python &>/dev/null; then
     if ! python -c "import flask" &>/dev/null; then
         echo -e "${CYAN}[*] Flask 설치 진행 중...${NC}"
-        pip install flask werkzeug
+        python -m pip install -r requirements.txt
     fi
-    SERVER_CMD="python app.py"
-elif command -v node &>/dev/null; then
-    if [ ! -d "node_modules" ]; then
-        echo -e "${CYAN}[*] npm 패키지 설치 진행 중...${NC}"
-        npm install
-    fi
-    SERVER_CMD="node server.js"
+    SERVER_CMD=(python "$SCRIPT_DIR/app.py")
+
 else
-    echo -e "${RED}[!] 오류: Python 또는 Node.js가 설치되어 있지 않습니다.${NC}"
+    echo -e "${RED}[!] 오류: Python 3가 설치되어 있지 않습니다.${NC}"
     echo "    설치 스크립트를 실행해주세요: ./install.sh"
     exit 1
 fi
@@ -139,7 +136,7 @@ fi
 # 백그라운드 실행 모드
 if [ "$BACKGROUND" = true ]; then
     echo -e "${BLUE}[*] 서버를 백그라운드(데몬) 모드로 시작합니다...${NC}"
-    nohup $SERVER_CMD > "$SCRIPT_DIR/server.log" 2>&1 &
+    nohup "${SERVER_CMD[@]}" > "$SCRIPT_DIR/server.log" 2>&1 &
     NEW_PID=$!
     echo "$NEW_PID" > "$PID_FILE"
     sleep 1
@@ -160,7 +157,7 @@ else
     echo -e "${YELLOW}    (백그라운드에서 실행하려면: ./start.sh --bg)${NC}\n"
     
     # PID 저장 및 트랩 설정
-    $SERVER_CMD &
+    "${SERVER_CMD[@]}" &
     SERVER_PID=$!
     echo "$SERVER_PID" > "$PID_FILE"
     

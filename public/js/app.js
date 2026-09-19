@@ -8,6 +8,8 @@
 
   // State Management
   const state = {
+    folder: '', page: 1, pages: 1, total: 0, counts: {}, selected: new Set(),
+    terminalBusy: false, editorDirty: false, editorBusy: false,
     currentAppView: 'portal', // 'portal' | 'cloud' | 'desktop' | 'dashboard'
     files: [],
     filteredFiles: [],
@@ -188,7 +190,10 @@
   };
 
   // ================= Init =================
-  function init() {
+  async function init() {
+    await Pulse.ready;
+    setupFileTools();
+    Pulse.canLeave = canLeaveEditor;
     setupEventListeners();
     setupDropZone();
     applyViewMode(state.viewMode);
@@ -209,17 +214,17 @@
 
     // Background Update Check
     setTimeout(() => checkServerUpdate(false), 2000);
-    setInterval(() => checkServerUpdate(false), 30000);
+    setInterval(() => { if (!document.hidden) checkServerUpdate(false); }, 300000);
 
-    // Dashboard periodic refresh (every 8s when dashboard is open)
+    // Refresh only visible monitoring views; server shares cached samples.
     setInterval(() => {
+      if (document.hidden) return;
       if (state.currentAppView === 'dashboard') {
         fetchDashboardData(true);
       } else if (state.currentAppView === 'desktop' && state.openWindows['monitor']) {
         fetchDashboardData(true);
-        updateMonitorWidget();
       }
-    }, 8000);
+    }, 15000);
 
     window.addEventListener('focus', () => {
       checkServerUpdate(false);
@@ -242,6 +247,7 @@
   function switchAppView(viewName) {
     state.currentAppView = viewName;
     window.location.hash = viewName;
+    requestAnimationFrame(() => Pulse.viewport());
 
     // Update Nav Tab Buttons
     [el.tabPortal, el.tabCloud, el.tabDesktop, el.tabDashboard].forEach(btn => {
@@ -268,7 +274,7 @@
 
   function updatePortalSummaries() {
     if (el.portalFilesSummary) {
-      const count = state.files ? state.files.length : 0;
+      const count = state.dashboardData?.disk?.cloudFilesCount ?? state.counts.all ?? 0;
       el.portalFilesSummary.textContent = `${count}개 항목 보관 중`;
     }
     if (state.dashboardData && el.portalUptimeSummary) {
@@ -382,7 +388,8 @@
         btn.classList.add('active');
         state.currentFilter = btn.getAttribute('data-filter');
         updateTitle();
-        render();
+        state.page = 1;
+        fetchFiles();
 
         if (window.innerWidth <= 860) {
           el.sidebar.classList.remove('open');
@@ -401,11 +408,14 @@
     if (el.btnListView) el.btnListView.addEventListener('click', () => applyViewMode('list'));
 
     // Search
+    let searchTimer;
     if (el.searchInput) {
       el.searchInput.addEventListener('input', (e) => {
         state.searchQuery = e.target.value.trim().toLowerCase();
         el.clearSearchBtn.classList.toggle('hidden', !state.searchQuery);
-        render();
+        state.page = 1;
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(fetchFiles, 250);
       });
     }
     if (el.clearSearchBtn) {
@@ -413,7 +423,8 @@
         el.searchInput.value = '';
         state.searchQuery = '';
         el.clearSearchBtn.classList.add('hidden');
-        render();
+        state.page = 1;
+        fetchFiles();
       });
     }
 
@@ -421,7 +432,8 @@
     if (el.sortSelect) {
       el.sortSelect.addEventListener('change', (e) => {
         state.sortBy = e.target.value;
-        render();
+        state.page = 1;
+        fetchFiles();
       });
     }
 
@@ -510,6 +522,7 @@
       if (data.success) {
         state.dashboardData = data;
         updateMenubarIndicators();
+        updateMonitorWidget();
         renderDashboard(data);
         updatePortalSummaries();
       }
@@ -526,13 +539,13 @@
     if (el.portalVerVal) el.portalVerVal.textContent = data.version;
 
     // CPU
-    if (el.metricCpuVal) el.metricCpuVal.textContent = `${data.cpu.percent}%`;
+    if (el.metricCpuVal) el.metricCpuVal.textContent = metricPercent(data.cpu);
     if (el.metricCpuCores) el.metricCpuCores.textContent = `${data.cpu.cores}코어 (부하 ${data.cpu.load1})`;
     if (el.metricCpuBar) el.metricCpuBar.style.width = `${Math.min(100, data.cpu.percent)}%`;
-    if (el.metricCpuLoad) el.metricCpuLoad.textContent = `1분 부하: ${data.cpu.load1} / 5분: ${data.cpu.load5 || data.cpu.load1}`;
+    if (el.metricCpuLoad) el.metricCpuLoad.textContent = `1분 부하: ${data.cpu.load1 ?? '측정 불가'} / 5분: ${data.cpu.load5 ?? '측정 불가'}`;
 
     // Memory
-    if (el.metricMemVal) el.metricMemVal.textContent = `${data.memory.percent}%`;
+    if (el.metricMemVal) el.metricMemVal.textContent = metricPercent(data.memory);
     if (el.metricMemUsed) el.metricMemUsed.textContent = `${data.memory.usedFormatted}`;
     if (el.metricMemBar) el.metricMemBar.style.width = `${Math.min(100, data.memory.percent)}%`;
     if (el.metricMemDetail) el.metricMemDetail.textContent = `전체 ${data.memory.totalFormatted} 중 ${data.memory.freeFormatted} 여유`;
@@ -542,12 +555,12 @@
       if (el.metricBatteryVal) el.metricBatteryVal.textContent = `${data.battery.percentage}%`;
       if (el.metricBatteryStatus) el.metricBatteryStatus.textContent = data.battery.status;
       if (el.metricBatteryBar) el.metricBatteryBar.style.width = `${data.battery.percentage}%`;
-      if (el.metricBatteryDetail) el.metricBatteryDetail.textContent = `온도 ${data.battery.temperature}°C (${data.battery.plugged})`;
+      if (el.metricBatteryDetail) el.metricBatteryDetail.textContent = `온도 ${data.battery.temperature === null ? '측정 불가' : data.battery.temperature + '°C'} (${data.battery.plugged})`;
     } else {
-      if (el.metricBatteryVal) el.metricBatteryVal.textContent = '정상';
-      if (el.metricBatteryStatus) el.metricBatteryStatus.textContent = '전원 연결';
-      if (el.metricBatteryBar) el.metricBatteryBar.style.width = '100%';
-      if (el.metricBatteryDetail) el.metricBatteryDetail.textContent = '24시간 무중단 전원 모드';
+      if (el.metricBatteryVal) el.metricBatteryVal.textContent = '측정 불가';
+      if (el.metricBatteryStatus) el.metricBatteryStatus.textContent = '권한 또는 장치 미지원';
+      if (el.metricBatteryBar) el.metricBatteryBar.style.width = '0%';
+      if (el.metricBatteryDetail) el.metricBatteryDetail.textContent = 'Termux:API 앱과 termux-api 패키지 및 권한을 확인하세요.';
     }
 
     // Disk
@@ -568,6 +581,7 @@
 
   // ================= Changelog Fetching & Modal =================
   async function fetchChangelog() {
+    if (!Pulse.isAdmin) return;
     try {
       const res = await fetch('/api/system/changelog');
       const data = await res.json();
@@ -621,7 +635,7 @@
     const raw = state.changelogData.changelog || '';
 
     // 간단하고 직관적인 Markdown to HTML 렌더링
-    let html = raw
+    let html = escapeHtml(raw)
       .replace(/^# (.*$)/gim, '<h1>$1</h1>')
       .replace(/^## (.*$)/gim, '<h2>$1</h2>')
       .replace(/^### (.*$)/gim, '<h3>$1</h3>')
@@ -644,7 +658,7 @@
   let isCheckingUpdate = false;
 
   async function checkServerUpdate(isManual = false) {
-    if (isCheckingUpdate || state.isUpdating) return;
+    if (!Pulse.isAdmin || document.hidden || isCheckingUpdate || state.isUpdating) return;
     isCheckingUpdate = true;
 
     if (isManual) {
@@ -662,6 +676,7 @@
     try {
       const res = await fetch('/api/system/check-update');
       const data = await res.json();
+      if (!data.success || data.fetchFailed || data.timeout) throw new Error('업데이트 확인 불가');
 
       if (data.success && data.hasUpdate) {
         state.hasUpdate = true;
@@ -708,7 +723,7 @@
 
         if (el.sidebarVersionBadge) {
           el.sidebarVersionBadge.className = 'version-badge latest';
-          el.sidebarVersionBadge.textContent = 'v1.2.0 최신 ✓';
+          el.sidebarVersionBadge.textContent = `${state.dashboardData?.version || ''} 최신 ✓`;
           el.sidebarVersionBadge.title = '서버가 최신 버전입니다.';
         }
 
@@ -723,7 +738,9 @@
       }
     } catch (err) {
       console.warn('Update check failed:', err);
-      if (isManual) showToast('업데이트 확인 실패 (인터넷 연결 상태를 확인하세요)');
+      if (el.sidebarVersionBadge) el.sidebarVersionBadge.textContent = '업데이트 확인 불가';
+      if (el.portalUpdateStatus) el.portalUpdateStatus.textContent = '업데이트 확인 불가';
+      if (isManual) showToast('업데이트 확인 실패 (인터넷 연결 상태를 확인하세요)', () => checkServerUpdate(true));
     } finally {
       isCheckingUpdate = false;
       if (el.btnManualCheck) {
@@ -735,64 +752,265 @@
   }
 
   async function applyServerUpdate() {
-    if (state.isUpdating) return;
+    if (state.isUpdating || !Pulse.isAdmin) return;
+    if (state.terminalBusy || activeUploads || uploadQueue.length) {
+      showToast('명령 실행과 파일 업로드가 끝난 뒤 업데이트하세요.');
+      return;
+    }
+    if (!await canLeaveEditor()) return;
     state.isUpdating = true;
-
+    const label = text => {
+      if (el.updateBtnLabel) el.updateBtnLabel.textContent = text;
+      showToast(text);
+    };
     if (el.btnApplyUpdate) el.btnApplyUpdate.disabled = true;
-    if (el.updateBtnSpinner) el.updateBtnSpinner.classList.remove('hidden');
-    if (el.updateBtnLabel) el.updateBtnLabel.textContent = '코드 동기화 중...';
-
-    showToast('🚀 GitHub에서 최신 코드를 다운로드하여 적용하는 중...');
-
     try {
-      const res = await fetch('/api/system/update', { method: 'POST' });
-      const data = await res.json();
-
-      if (data.success) {
-        if (el.updateBtnLabel) el.updateBtnLabel.textContent = '적용 완료!';
-        showToast('🎉 최신 코드가 성공적으로 적용되었습니다! 페이지를 새로고침합니다...');
-        setTimeout(() => {
-          window.location.reload();
-        }, 1200);
-      } else {
-        state.isUpdating = false;
-        if (el.btnApplyUpdate) el.btnApplyUpdate.disabled = false;
-        if (el.updateBtnSpinner) el.updateBtnSpinner.classList.add('hidden');
-        if (el.updateBtnLabel) el.updateBtnLabel.textContent = '다시 시도';
-        showToast('업데이트 실패: ' + (data.error || data.output || '알 수 없는 오류'));
+      label('1/3 · 최신 코드 다운로드 중');
+      const data = await Pulse.post('/api/system/update');
+      if (!data.restartSupported) {
+        await Pulse.ask('다운로드 완료. Termux에서 ./stop.sh 후 ./start.sh --bg로 재시작하세요. 이후 새로고침하면 적용됩니다.', { cancel: false });
+        return;
       }
-    } catch (err) {
+      label('2/3 · 서버 재시작 중');
+      await Pulse.post('/api/system/restart');
+      label('3/3 · 서버 재접속 확인 중');
+      for (let count = 0; count < 30; count++) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        try {
+          const health = await Pulse.api('/api/system/health', { signal: AbortSignal.timeout(3000) });
+          if (health.instanceId !== data.instanceId) {
+            state.editorDirty = false;
+            location.reload();
+            return;
+          }
+        } catch (_) { /* The process is restarting. */ }
+      }
+      throw new Error('재접속을 확인하지 못했습니다. Termux에서 ./status.sh로 상태를 확인한 뒤 새로고침하세요.');
+    } catch (error) {
+      await Pulse.ask(error.message, { cancel: false });
+    } finally {
       state.isUpdating = false;
       if (el.btnApplyUpdate) el.btnApplyUpdate.disabled = false;
-      if (el.updateBtnSpinner) el.updateBtnSpinner.classList.add('hidden');
-      if (el.updateBtnLabel) el.updateBtnLabel.textContent = '다시 시도';
-      showToast('서버 업데이트 요청 중 통신 오류가 발생했습니다.');
+      if (el.updateBtnLabel) el.updateBtnLabel.textContent = '업데이트 다시 확인';
     }
   }
 
-  // ================= File API & List Rendering =================
-  async function fetchFiles() {
-    el.loadingState.classList.remove('hidden');
-    el.emptyState.classList.add('hidden');
-    el.fileGrid.innerHTML = '';
-    el.fileListBody.innerHTML = '';
-
+  function metricPercent(metric) {
+    if (metric.percent === null || metric.percent === undefined) return metric.measurement === 'sampling' ? '측정 중' : '측정 불가';
+    return `${metric.percent}%${metric.measurement === 'estimated' ? ' (추정)' : ''}`;
+  }
+  function joinPath(name) { return state.folder ? `${state.folder}/${name}` : name; }
+  function navigateFolder(path) {
+    state.folder = path;
+    state.page = 1;
+    state.searchQuery = '';
+    if (el.searchInput) el.searchInput.value = '';
+    state.selected.clear();
+    fetchFiles();
+  }
+  function addSelection(container, file, inline = false) {
+    if (!Pulse.isAdmin) return;
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = inline ? 'pulse-selection-inline' : 'pulse-selection';
+    checkbox.dataset.path = file.path;
+    checkbox.setAttribute('aria-label', `${file.name} 선택`);
+    checkbox.checked = state.selected.has(file.path);
+    checkbox.addEventListener('click', event => event.stopPropagation());
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) state.selected.add(file.path); else state.selected.delete(file.path);
+      document.querySelectorAll('input[data-path]').forEach(other => {
+        other.checked = state.selected.has(other.dataset.path);
+      });
+      updateFileTools();
+    });
+    container.prepend(checkbox);
+  }
+  function updateFileTools() {
+    document.querySelectorAll('.pulse-file-path').forEach(el => { el.textContent = `내 보관함 / ${state.folder || ''}`; });
+    document.querySelectorAll('.pulse-page-label').forEach(el => { el.textContent = `${state.page} / ${state.pages} · ${state.total}개`; });
+    document.querySelectorAll('[data-file-action]').forEach(button => {
+      const action = button.dataset.fileAction;
+      if (action === 'prev') button.disabled = state.page <= 1;
+      if (action === 'next') button.disabled = state.page >= state.pages;
+      if (action === 'up') button.disabled = !state.folder;
+      if (action === 'rename') button.disabled = state.selected.size !== 1;
+      if (['move', 'delete'].includes(action)) button.disabled = !state.selected.size;
+      if (action === 'select') button.textContent = state.selected.size ? `선택 해제 (${state.selected.size})` : '페이지 전체 선택';
+    });
+  }
+  async function fileAction(action) {
     try {
-      const res = await fetch('/api/files');
-      const data = await res.json();
-
-      if (data.success) {
-        state.files = data.files || [];
-        updateCounts();
-        render();
-        updatePortalSummaries();
-      } else {
-        showToast('파일 목록 불러오기 실패: ' + data.error);
+      if (action === 'up') { navigateFolder(state.folder.split('/').slice(0, -1).join('/')); return; }
+      if (action === 'home') { navigateFolder(''); return; }
+      if (action === 'prev' || action === 'next') {
+        state.page += action === 'next' ? 1 : -1;
+        await fetchFiles(); return;
       }
-    } catch (err) {
-      showToast('서버 연결 실패. 서버가 실행 중인지 확인하세요.');
+      if (action === 'select') {
+        if (state.selected.size) state.selected.clear(); else state.files.forEach(file => state.selected.add(file.path));
+        render(); renderFinderFiles(); updateFileTools(); return;
+      }
+      if (action === 'trash') { await openTrash(); return; }
+      if (action === 'mkdir') {
+        const name = await Pulse.ask('새 폴더 이름', { input: true });
+        if (!name) return;
+        if (name.includes('/') || name.includes('\\')) throw new Error('폴더 이름에 경로 구분자를 사용할 수 없습니다.');
+        await Pulse.post('/api/folders', { path: joinPath(name) });
+      }
+      if (action === 'rename') {
+        const source = [...state.selected][0];
+        const name = await Pulse.ask('새 이름', { input: true, value: source.split('/').pop() });
+        if (!name) return;
+        if (name.includes('/') || name.includes('\\')) throw new Error('이름에 경로 구분자를 사용할 수 없습니다.');
+        const parent = source.split('/').slice(0, -1).join('/');
+        await Pulse.post('/api/files/move', { source, destination: parent ? `${parent}/${name}` : name });
+      }
+      if (action === 'move' || action === 'delete') {
+        const paths = [...state.selected];
+        let folder = '';
+        if (action === 'move') {
+          folder = await Pulse.ask('이동할 폴더 경로를 입력하세요. 보관함 최상위로 이동하려면 비워두세요. 폴더는 먼저 생성해야 합니다.', { input: true });
+          if (folder === null) return;
+          folder = folder.trim().replace(/^\/+|\/+$/g, '');
+        } else if (!await Pulse.ask(`${paths.length}개 항목을 휴지통으로 옮길까요?`, { confirm: '휴지통으로 이동' })) return;
+        let completed = 0;
+        const failed = [];
+        for (const source of paths) {
+          try {
+            if (action === 'delete') await Pulse.api('/api/files/' + encodeURIComponent(source), { method: 'DELETE' });
+            else await Pulse.post('/api/files/move', { source, destination: (folder ? folder + '/' : '') + source.split('/').pop() });
+            completed++;
+          } catch (error) { failed.push(`${source}: ${error.message}`); }
+        }
+        if (failed.length) await Pulse.ask(`${completed}개 완료, ${failed.length}개 실패\n${failed.join('\n')}`, { cancel: false });
+        else showToast(`${completed}개 항목을 ${action === 'delete' ? '휴지통으로 옮겼습니다.' : '이동했습니다.'}`);
+      }
+      await fetchFiles();
+      fetchStorageStats();
+    } catch (error) { showToast(error.message, () => fileAction(action)); }
+  }
+  async function restoreTrash(id) {
+    try { await Pulse.post(`/api/trash/${id}/restore`); await fetchFiles(); fetchStorageStats(); showToast('복원했습니다.'); }
+    catch (error) { showToast(error.message, () => restoreTrash(id)); }
+  }
+  async function openTrash() {
+    const data = await Pulse.api('/api/trash');
+    const dialog = document.getElementById('pulse-trash');
+    const list = document.getElementById('pulse-trash-list');
+    list.replaceChildren();
+    if (!data.items.length) list.textContent = '휴지통이 비어 있습니다.';
+    for (const item of data.items) {
+      const row = document.createElement('div');
+      row.className = 'pulse-trash-row';
+      const name = document.createElement('span');
+      name.textContent = item.path;
+      row.appendChild(name);
+      for (const restore of [true, false]) {
+        const button = document.createElement('button');
+        button.className = 'btn btn-outline';
+        button.textContent = restore ? '복원' : '영구 삭제';
+        button.addEventListener('click', async () => {
+          if (!restore && !await Pulse.ask(`'${item.path}'을 영구 삭제할까요? 복구할 수 없습니다.`, { confirm: '영구 삭제' })) return;
+          button.disabled = true;
+          try {
+            if (restore) await Pulse.post(`/api/trash/${item.id}/restore`);
+            else await Pulse.api(`/api/trash/${item.id}`, { method: 'DELETE' });
+            await openTrash(); await fetchFiles(); fetchStorageStats();
+          } catch (error) { await Pulse.ask(error.message, { cancel: false }); }
+          finally { button.disabled = false; }
+        });
+        row.appendChild(button);
+      }
+      list.appendChild(row);
+    }
+    if (!dialog.open) dialog.showModal();
+  }
+  function setupFileTools() {
+    const dialog = document.createElement('dialog');
+    dialog.id = 'pulse-trash';
+    dialog.className = 'pulse-dialog';
+    dialog.setAttribute('aria-label', '휴지통');
+    dialog.innerHTML = '<h2>휴지통</h2><p>영구 삭제 전까지 저장 공간을 사용합니다.</p><div id="pulse-trash-list"></div><form method="dialog"><button class="btn btn-primary">닫기</button></form>';
+    document.body.appendChild(dialog);
+    const targets = [document.getElementById('file-grid').parentElement, document.querySelector('.finder-content')];
+    targets.forEach(target => {
+      const toolbar = document.createElement('div');
+      toolbar.className = 'pulse-file-tools';
+      const path = document.createElement('span');
+      path.className = 'pulse-file-path';
+      toolbar.appendChild(path);
+      const pager = document.createElement('div');
+      pager.className = 'pulse-pagination';
+      for (const [action, text] of Object.entries({ home: '보관함', up: '상위 폴더', mkdir: '새 폴더', select: '페이지 전체 선택', rename: '이름 변경', move: '이동', delete: '휴지통 이동', trash: '휴지통', prev: '이전', next: '다음' })) {
+        const button = document.createElement('button');
+        button.className = 'btn btn-outline';
+        button.dataset.fileAction = action;
+        button.textContent = text;
+        if (!['home', 'up', 'prev', 'next'].includes(action)) button.setAttribute('data-admin', '');
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          try { await fileAction(action); }
+          finally { button.disabled = false; updateFileTools(); }
+        });
+        (['prev', 'next'].includes(action) ? pager : toolbar).appendChild(button);
+      }
+      const page = document.createElement('span');
+      page.className = 'pulse-page-label';
+      pager.insertBefore(page, pager.lastChild);
+      target.prepend(toolbar);
+      target.appendChild(pager);
+    });
+    const vncButton = document.createElement('button');
+    vncButton.className = 'win-btn-sm';
+    vncButton.textContent = '연결 주소';
+    vncButton.addEventListener('click', async () => {
+      const url = await Pulse.ask('Linux 데스크톱 주소를 입력하세요. 비워두면 서버 기본 주소를 사용합니다. HTTPS 접속 시 HTTPS 주소가 필요합니다.', { input: true, value: localStorage.getItem('pulse_vnc_url') || '' });
+      if (url === null) return;
+      if (url.trim()) {
+        try { const parsed = new URL(url.trim()); if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error(); }
+        catch (_) { showToast('올바른 HTTP 또는 HTTPS 주소를 입력하세요.'); return; }
+      }
+      localStorage.setItem('pulse_vnc_url', url.trim());
+      checkVncStatus();
+    });
+    document.querySelector('#win-linux .window-header-actions').appendChild(vncButton);
+    updateFileTools();
+  }
+
+  // ================= File API & List Rendering =================
+  let fileRequest = 0;
+  async function fetchFiles() {
+    const requestId = ++fileRequest;
+    el.loadingState.classList.remove('hidden');
+    try {
+      const query = new URLSearchParams({ path: state.folder, page: state.page, limit: 60,
+        q: state.searchQuery, type: state.currentFilter, sort: state.sortBy });
+      const data = await Pulse.api('/api/files?' + query);
+      if (requestId !== fileRequest) return;
+      state.files = data.files;
+      state.total = data.total;
+      state.page = data.page;
+      state.pages = data.pages;
+      state.counts = data.counts;
+      state.selected.clear();
+      updateCounts();
+      render();
+      renderFinderFiles();
+      updateFileTools();
+      updatePortalSummaries();
+    } catch (error) {
+      if (requestId !== fileRequest) return;
+      state.files = [];
+      state.total = 0;
+      state.pages = 1;
+      state.selected.clear();
+      render();
+      renderFinderFiles();
+      updateFileTools();
+      showToast(error.message, () => fetchFiles());
     } finally {
-      el.loadingState.classList.add('hidden');
+      if (requestId === fileRequest) el.loadingState.classList.add('hidden');
     }
   }
 
@@ -815,12 +1033,12 @@
     const photosPct = ((typeSizes.image?.bytes || 0) / totalBytes) * 100;
     const videosPct = ((typeSizes.video?.bytes || 0) / totalBytes) * 100;
     const docsPct = ((typeSizes.document?.bytes || 0) / totalBytes) * 100;
-    const othersPct = ((typeSizes.other?.bytes || 0) / totalBytes) * 100;
+    const othersPct = (((typeSizes.other?.bytes || 0) + (typeSizes.audio?.bytes || 0)) / totalBytes) * 100;
 
-    if (el.segPhotos) el.segPhotos.style.width = Math.max(photosPct, 0.5) + '%';
-    if (el.segVideos) el.segVideos.style.width = Math.max(videosPct, 0.5) + '%';
-    if (el.segDocs) el.segDocs.style.width = Math.max(docsPct, 0.5) + '%';
-    if (el.segOthers) el.segOthers.style.width = Math.max(othersPct, 0.5) + '%';
+    if (el.segPhotos) el.segPhotos.style.width = photosPct + '%';
+    if (el.segVideos) el.segVideos.style.width = videosPct + '%';
+    if (el.segDocs) el.segDocs.style.width = docsPct + '%';
+    if (el.segOthers) el.segOthers.style.width = othersPct + '%';
 
     const usedFormatted = data.cloudUsedFormatted || '0 B';
     const totalFormatted = data.diskTotalFormatted || '0 GB';
@@ -830,16 +1048,7 @@
   }
 
   function updateCounts() {
-    const counts = { all: 0, image: 0, video: 0, document: 0, audio: 0, other: 0 };
-    state.files.forEach(f => {
-      counts.all++;
-      if (counts[f.type] !== undefined) {
-        counts[f.type]++;
-      } else {
-        counts.other++;
-      }
-    });
-
+    const counts = state.counts;
     if (el.countAll) el.countAll.textContent = counts.all;
     if (el.countImage) el.countImage.textContent = counts.image;
     if (el.countVideo) el.countVideo.textContent = counts.video;
@@ -851,6 +1060,7 @@
   function updateTitle() {
     const titles = {
       all: '모든 파일',
+      folder: '폴더',
       image: '사진',
       video: '비디오',
       document: '문서 / 텍스트',
@@ -863,34 +1073,14 @@
   }
 
   function render() {
-    let list = state.files.slice();
-
-    if (state.currentFilter !== 'all') {
-      list = list.filter(f => f.type === state.currentFilter);
-    }
-
-    if (state.searchQuery) {
-      list = list.filter(f => f.name.toLowerCase().includes(state.searchQuery));
-    }
-
-    list.sort((a, b) => {
-      switch (state.sortBy) {
-        case 'modified-desc': return b.modified - a.modified;
-        case 'modified-asc': return a.modified - b.modified;
-        case 'name-asc': return a.name.localeCompare(b.name, 'ko');
-        case 'name-desc': return b.name.localeCompare(a.name, 'ko');
-        case 'size-desc': return b.size - a.size;
-        case 'size-asc': return a.size - b.size;
-        default: return 0;
-      }
-    });
+    const list = state.files;
 
     state.filteredFiles = list;
     // 모든 파일을 순서대로 미리보기 리스트로 등록 (키보드 좌우 방향키로 연속 탐색 가능!)
     state.previewableList = list;
 
     if (el.fileSummary) {
-      el.fileSummary.textContent = `${list.length}개 항목`;
+      el.fileSummary.textContent = `${state.total}개 항목 · ${state.page}/${state.pages}페이지`;
     }
 
     if (list.length === 0) {
@@ -924,8 +1114,8 @@
       card.setAttribute('data-index', index);
 
       let thumbContent = '';
-      if (file.type === 'image') {
-        thumbContent = `<img class="file-thumb-img" src="${file.previewUrl}" alt="${escapeHtml(file.name)}" loading="lazy">`;
+      if (file.type === 'image' && file.thumbnailUrl) {
+        thumbContent = `<img class="file-thumb-img" src="${escapeHtml(file.thumbnailUrl)}" alt="${escapeHtml(file.name)}" loading="lazy">`;
       } else if (file.type === 'video') {
         thumbContent = `
           <div class="file-thumb-video-placeholder">
@@ -936,7 +1126,7 @@
       } else if (file.isText || file.type === 'document') {
         thumbContent = `
           <div class="file-thumb-doc-placeholder">
-            <span class="doc-badge-ext">${file.extension.toUpperCase() || 'TXT'}</span>
+            <span class="doc-badge-ext">${escapeHtml(file.extension.toUpperCase()) || 'TXT'}</span>
             <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
           </div>
         `;
@@ -944,7 +1134,7 @@
         thumbContent = `
           <div class="file-thumb-icon-placeholder">
             ${getFileTypeIconSvg(file.type)}
-            <span class="doc-badge-ext">${file.extension.toUpperCase()}</span>
+            <span class="doc-badge-ext">${escapeHtml(file.extension.toUpperCase())}</span>
           </div>
         `;
       }
@@ -977,7 +1167,8 @@
         btnDl.addEventListener('click', (e) => {
           e.stopPropagation();
           e.preventDefault();
-          downloadFile(file.name);
+          if (file.type === 'folder') navigateFolder(file.path);
+          else downloadFile(file.path || file.name);
         });
       }
 
@@ -994,6 +1185,8 @@
         openPreview(index);
       });
 
+      addSelection(card, file);
+      card.querySelector('img')?.addEventListener('error', event => { event.target.hidden = true; });
       el.fileGrid.appendChild(card);
     });
   }
@@ -1046,7 +1239,8 @@
         btnDl.addEventListener('click', (e) => {
           e.stopPropagation();
           e.preventDefault();
-          downloadFile(file.name);
+          if (file.type === 'folder') navigateFolder(file.path);
+          else downloadFile(file.path || file.name);
         });
       }
       if (btnDel) {
@@ -1061,6 +1255,7 @@
         if (e.target.closest('.row-action-btn')) return;
         openPreview(index);
       });
+      addSelection(tr.querySelector('td'), file, true);
       el.fileListBody.appendChild(tr);
     });
   }
@@ -1083,6 +1278,7 @@
     state.activePreviewIndex = index;
     const file = state.previewableList[index];
     if (!file) return;
+    if (file.type === 'folder') { navigateFolder(file.path); return; }
 
     el.previewFilename.textContent = file.name;
     el.previewFilesize.textContent = file.sizeFormatted;
@@ -1131,7 +1327,7 @@
       el.previewBody.appendChild(iframe);
     }
     // 5) 텍스트 및 코드 파일 (txt, md, json, py, js, log, csv 등)
-    else if (file.isText || file.type === 'document') {
+    else if (file.isText) {
       const container = document.createElement('div');
       container.className = 'preview-text-container';
       container.innerHTML = `
@@ -1145,6 +1341,7 @@
 
       try {
         const res = await fetch(file.previewUrl);
+        if (!res.ok) { const error = await res.json(); throw new Error(error.error || '미리보기 실패'); }
         const text = await res.text();
         state.activePreviewText = text;
 
@@ -1154,7 +1351,7 @@
 
         container.querySelector('.preview-text-toolbar').innerHTML = `
           <span>라인: ${lineCount.toLocaleString()}줄 | 글자: ${charCount.toLocaleString()}자 | UTF-8</span>
-          <span>${file.extension.toUpperCase() || 'TXT'} 문서</span>
+          <span>${escapeHtml(file.extension.toUpperCase()) || 'TXT'} 문서</span>
         `;
         container.querySelector('.preview-text-body').textContent = text;
 
@@ -1173,15 +1370,16 @@
         <div style="font-size: 64px; margin-bottom: 16px;">📦</div>
         <h3 style="margin-bottom: 8px;">${escapeHtml(file.name)}</h3>
         <p style="color: #8e8e93; font-size: 13.5px; margin-bottom: 20px;">이 파일 형식은 브라우저 직접 미리보기를 지원하지 않습니다.</p>
-        <button class="btn btn-primary" onclick="window.location.href='${file.downloadUrl}'">
+        <button class="btn btn-primary">
           다운로드하여 열기 (${file.sizeFormatted})
         </button>
       `;
+      fallback.querySelector('button').addEventListener('click', () => downloadFile(file.path || file.name));
       el.previewBody.appendChild(fallback);
     }
 
     // Modal action buttons
-    el.previewDownloadBtn.onclick = () => downloadFile(file.name);
+    el.previewDownloadBtn.onclick = () => downloadFile(file.path || file.name);
     el.previewDeleteBtn.onclick = () => {
       closePreview();
       promptDeleteFile(file);
@@ -1226,7 +1424,7 @@
 
   function promptDeleteFile(file) {
     state.pendingDeleteFile = file;
-    el.deleteModalMsg.textContent = `'${file.name}' (${file.sizeFormatted}) 파일을 영구히 삭제하시겠습니까?`;
+    el.deleteModalMsg.textContent = `'${file.name}' (${file.sizeFormatted}) 항목을 휴지통으로 옮길까요? 나중에 복원할 수 있습니다.`;
     el.deleteModal.classList.remove('hidden');
   }
 
@@ -1244,10 +1442,10 @@
     }
 
     try {
-      const res = await fetch(`/api/files/${encodeURIComponent(file.name)}`, { method: 'DELETE' });
+      const res = await fetch(`/api/files/${encodeURIComponent(file.path || file.name)}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
-        showToast(`'${file.name}' 파일이 삭제되었습니다.`);
+        showToast(`'${file.name}' 항목을 휴지통으로 옮겼습니다.`, () => restoreTrash(data.trashId), '복원');
         await fetchFiles();
         if (typeof renderFinderFiles === 'function') {
           renderFinderFiles();
@@ -1264,12 +1462,25 @@
 
   // ================= File Upload =================
   function uploadFiles(fileList) {
-    if (!fileList || fileList.length === 0) return;
+    if (!Pulse.isAdmin || !fileList || fileList.length === 0) return;
 
+    for (const file of Array.from(fileList)) uploadQueue.push({ file, folder: state.folder });
+    pumpUploads();
+  }
+
+  const uploadQueue = [];
+  let activeUploads = 0;
+  function pumpUploads() {
+    while (activeUploads < 2 && uploadQueue.length) {
+      activeUploads++;
+      const job = uploadQueue.shift();
+      startUpload(job.file, job.folder);
+    }
+  }
+  function startUpload(file, folder) {
     el.uploadWidget.classList.remove('hidden');
-    el.uploadWidgetTitleText.textContent = `${fileList.length}개 파일 업로드 중...`;
+    el.uploadWidgetTitleText.textContent = `업로드 중 · 대기 ${uploadQueue.length}개`;
 
-    Array.from(fileList).forEach(file => {
       const itemId = 'upload-' + Math.random().toString(36).substring(2, 9);
       const itemEl = document.createElement('div');
       itemEl.className = 'upload-item';
@@ -1289,7 +1500,8 @@
       formData.append('files', file);
 
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', '/api/upload', true);
+      xhr.open('POST', '/api/upload?path=' + encodeURIComponent(folder), true);
+      xhr.setRequestHeader('X-CSRF-Token', Pulse.csrf);
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
@@ -1314,17 +1526,19 @@
           fetchDashboardData(true);
         } else {
           itemEl.querySelector('.upload-item-pct').textContent = '실패 ✕';
+          showToast('업로드 실패. 로그인과 저장 공간을 확인하세요.', () => { uploadQueue.push({ file, folder }); pumpUploads(); });
           itemEl.querySelector('.upload-progress-bar').style.backgroundColor = 'var(--apple-red)';
         }
       };
 
       xhr.onerror = () => {
         itemEl.querySelector('.upload-item-pct').textContent = '오류 ✕';
+        showToast('업로드 연결 실패', () => { uploadQueue.push({ file, folder }); pumpUploads(); });
         itemEl.querySelector('.upload-progress-bar').style.backgroundColor = 'var(--apple-red)';
       };
 
+      xhr.onloadend = () => { activeUploads--; pumpUploads(); };
       xhr.send(formData);
-    });
   }
 
   // ================= Drag and Drop =================
@@ -1392,13 +1606,11 @@
     updateDesktopClock();
     updateMenubarIndicators();
 
-    // If no windows open, open Terminal by default
-    if (Object.keys(state.openWindows).length === 0) {
-      openDesktopWindow('terminal');
-    }
+
   }
 
   function updateDesktopClock() {
+    if (document.hidden || state.currentAppView !== 'desktop') return;
     const clockEl = document.getElementById('desktop-clock');
     if (!clockEl) return;
     const now = new Date();
@@ -1420,7 +1632,7 @@
       }
       if (batPct && state.dashboardData.battery && state.dashboardData.battery.percentage !== null) {
         batPct.textContent = `${state.dashboardData.battery.percentage}%`;
-      }
+      } else if (batPct) { batPct.textContent = '—'; }
       const data = state.dashboardData;
       const labels = {
         'settings-os-version': data.version ? `Pulse OS ${data.version}` : 'Pulse OS · 버전 정보 없음',
@@ -1530,6 +1742,7 @@
   }
 
   function openDesktopWindow(appId) {
+    if (['terminal', 'linux'].includes(appId) && !Pulse.isAdmin) return;
     const win = document.getElementById('win-' + appId);
     if (!win) return;
     win.classList.remove('hidden');
@@ -1539,6 +1752,10 @@
     // Update Dock Dot
     const dot = document.querySelector(`.dock-dot[data-app-dot="${appId}"]`);
     if (dot) dot.classList.remove('hidden');
+
+    if (appId === 'editor' && !document.getElementById('editor-filename-input').value) {
+      document.getElementById('editor-filename-input').value = joinPath('Untitled.txt');
+    }
 
     // Default sizing and cascading positioning
     if (!win.dataset.positioned) {
@@ -1583,7 +1800,15 @@
     }
   }
 
-  function closeDesktopWindow(appId) {
+  async function closeDesktopWindow(appId) {
+    if (appId === 'editor' && !await canLeaveEditor()) return;
+    if (appId === 'editor') {
+      document.getElementById('editor-textarea').value = state.editorSavedText || '';
+      document.getElementById('editor-filename-input').value = state.editorSavedPath || '';
+      state.editorDirty = false;
+      document.getElementById('editor-save-status').textContent = state.editorSavedPath ? '저장됨 ✓' : '새 문서';
+      editorStats();
+    }
     const win = document.getElementById('win-' + appId);
     if (!win) return;
     win.classList.add('hidden');
@@ -1594,7 +1819,8 @@
     const dot = document.querySelector(`.dock-dot[data-app-dot="${appId}"]`);
     if (dot) dot.classList.add('hidden');
 
-    const remaining = Object.keys(state.openWindows);
+    document.querySelector(`.dock-item[data-app="${appId}"]`)?.classList.remove('active');
+    const remaining = Object.keys(state.openWindows).filter(id => !document.getElementById('win-' + id).classList.contains('window-minimized'));
     if (remaining.length > 0) {
       bringWindowToFront(remaining[remaining.length - 1]);
     } else {
@@ -1607,6 +1833,9 @@
     const win = document.getElementById('win-' + appId);
     if (!win) return;
     win.classList.add('window-minimized');
+    document.querySelectorAll('.dock-item').forEach(item => item.classList.remove('active'));
+    const title = document.getElementById('desktop-active-app-name');
+    if (title) title.textContent = 'Pulse OS';
   }
 
   function maximizeDesktopWindow(appId) {
@@ -1621,6 +1850,11 @@
     state.topZIndex++;
     win.style.zIndex = state.topZIndex;
     state.activeDesktopApp = appId;
+    document.querySelectorAll('.desktop-window').forEach(item => item.classList.toggle('mobile-background', item !== win));
+    document.querySelectorAll('.dock-item').forEach(item => {
+      item.classList.toggle('active', item.dataset.app === appId);
+      item.setAttribute('aria-pressed', String(item.dataset.app === appId));
+    });
 
     const names = {
       terminal: 'Pulse 터미널',
@@ -1645,6 +1879,7 @@
     let initialLeft = 0, initialTop = 0;
 
     function onStart(clientX, clientY) {
+      if (window.innerWidth <= 768) return;
       if (win.classList.contains('window-maximized')) return;
       isDragging = true;
       bringWindowToFront(win.getAttribute('data-app'));
@@ -1767,7 +2002,7 @@
       form.addEventListener('submit', (e) => {
         e.preventDefault();
         const cmd = input.value.trim();
-        if (!cmd) return;
+        if (!cmd || state.terminalBusy) return;
         input.value = '';
         executeCommand(cmd);
       });
@@ -1793,6 +2028,7 @@
     }
 
     async function executeCommand(cmd) {
+      if (state.terminalBusy || !Pulse.isAdmin) return;
       state.terminalHistory.push(cmd);
       state.terminalHistoryIdx = -1;
 
@@ -1821,6 +2057,12 @@
         return;
       }
 
+      state.terminalBusy = true;
+      const status = document.getElementById('terminal-status');
+      status.textContent = '실행 중 · 최대 15초';
+      status.dataset.busy = 'true';
+      const controls = document.querySelectorAll('#terminal-form button, .preset-cmd-btn, #btn-term-clear');
+      controls.forEach(button => { button.disabled = true; });
       try {
         const res = await fetch('/api/terminal/exec', {
           method: 'POST',
@@ -1828,6 +2070,7 @@
           body: JSON.stringify({ command: cmd, cwd: state.terminalCwd })
         });
         const data = await res.json();
+        status.textContent = data.exitCode === 0 ? '실행 완료 · 최대 15초' : `실행 실패 · 종료 코드 ${data.exitCode ?? res.status}`;
         if (data.cwd) {
           state.terminalCwd = data.cwd;
           const shortCwd = data.cwd.split('/').slice(-2).join('/') || data.cwd;
@@ -1835,13 +2078,18 @@
         }
         const outLine = document.createElement('div');
         outLine.className = `term-line ${data.exitCode === 0 ? 'term-success' : 'term-err'}`;
-        outLine.textContent = data.output || (data.exitCode === 0 ? '(성공 - 반환값 없음)' : `종료 코드: ${data.exitCode}`);
+        outLine.textContent = data.output || data.error || (data.exitCode === 0 ? '(성공 - 반환값 없음)' : `종료 코드: ${data.exitCode}`);
         output.appendChild(outLine);
       } catch (err) {
         const errLine = document.createElement('div');
         errLine.className = 'term-line term-err';
         errLine.textContent = `실행 통신 오류: ${err.message}`;
+        status.textContent = '연결 실패 · 서버에서 명령이 실행 중일 수 있습니다.';
         output.appendChild(errLine);
+      } finally {
+        state.terminalBusy = false;
+        status.dataset.busy = 'false';
+        controls.forEach(button => { button.disabled = false; });
       }
       output.scrollTop = output.scrollHeight;
     }
@@ -1859,13 +2107,13 @@
     }
 
     if (newFileBtn) {
-      newFileBtn.addEventListener('click', () => {
-        const name = prompt('생성할 파일명을 입력하세요 (예: script.py, memo.txt):');
+      newFileBtn.addEventListener('click', async () => {
+        const name = await Pulse.ask('생성할 파일명을 입력하세요 (예: script.py, memo.txt):', { input: true });
         if (!name || !name.trim()) return;
         fetch('/api/files/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: name.trim(), content: '' })
+          body: JSON.stringify({ filename: joinPath(name.trim()), content: '' })
         })
         .then(r => r.json())
         .then(data => {
@@ -1876,10 +2124,10 @@
               openEditorWithFile(data.filename);
             });
           } else {
-            alert('파일 생성 실패: ' + (data.error || '오류'));
+            showToast('파일 생성 실패: ' + (data.error || '오류'));
           }
         })
-        .catch(err => alert('파일 생성 통신 오류: ' + err.message));
+        .catch(err => showToast('파일 생성 통신 오류: ' + err.message));
       });
     }
 
@@ -1888,13 +2136,15 @@
       item.addEventListener('click', () => {
         document.querySelectorAll('.finder-nav-item').forEach(i => i.classList.remove('active'));
         item.classList.add('active');
-        state.finderFilter = item.getAttribute('data-finder-filter') || 'all';
-        renderFinderFiles();
+        state.currentFilter = item.getAttribute('data-finder-filter') || 'all';
+        state.page = 1;
+        fetchFiles();
       });
     });
   }
 
   function getFileEmoji(file) {
+    if (file.type === 'folder') return Pulse.icon('finder');
     if (file.type === 'image') return '🖼️';
     if (file.type === 'video') return '🎬';
     if (file.type === 'audio') return '🎵';
@@ -1910,10 +2160,9 @@
     if (!grid) return;
     grid.innerHTML = '';
 
-    const filter = state.finderFilter || 'all';
-    const list = (state.files || []).filter(f => filter === 'all' || f.type === filter);
+    const list = state.files;
 
-    if (status) status.textContent = `${list.length}개 항목`;
+    if (status) status.textContent = `${state.total}개 항목 · ${state.page}/${state.pages}페이지`;
 
     if (list.length === 0) {
       grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #86868b; padding: 24px; font-size: 13px;">파일이 없습니다.</div>';
@@ -1928,134 +2177,116 @@
         <div class="finder-item-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
       `;
 
-      item.addEventListener('dblclick', () => {
+      item.addEventListener('click', () => {
+        if (file.type === 'folder') { navigateFolder(file.path); return; }
         if (file.isText) {
-          openEditorWithFile(file.name);
+          openEditorWithFile(file.path || file.name);
         } else {
-          const idx = state.files.findIndex(f => f.name === file.name);
+          state.previewableList = state.files;
+          const idx = state.files.findIndex(f => f.path === file.path);
           if (idx !== -1) openPreview(idx);
         }
       });
 
+      addSelection(item, file);
       grid.appendChild(item);
     });
   }
 
-  // [App 3: Code & Text Editor]
-  function setupEditorLogic() {
-    const textarea = document.getElementById('editor-textarea');
-    const gutter = document.getElementById('editor-gutter');
-    const filenameInput = document.getElementById('editor-filename-input');
-    const saveBtn = document.getElementById('btn-editor-save');
-    const statsBadge = document.getElementById('editor-stats-badge');
-    const saveStatus = document.getElementById('editor-save-status');
-
-    function updateStats() {
-      const lines = textarea.value.split('\n');
-      const count = lines.length;
-      const chars = textarea.value.length;
-      if (statsBadge) statsBadge.textContent = `${count}줄 | ${chars}자`;
-      if (gutter) {
-        gutter.innerHTML = Array.from({ length: count }, (_, i) => i + 1).join('<br>');
-      }
-    }
-
-    if (textarea) {
-      textarea.addEventListener('input', () => {
-        updateStats();
-        if (saveStatus) {
-          saveStatus.textContent = '수정 중...';
-          saveStatus.classList.remove('green');
-        }
-      });
-
-      textarea.addEventListener('scroll', () => {
-        if (gutter) gutter.scrollTop = textarea.scrollTop;
-      });
-
-      textarea.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-          e.preventDefault();
-          saveEditorContent();
-        }
-        if (e.key === 'Tab') {
-          e.preventDefault();
-          const start = textarea.selectionStart;
-          const end = textarea.selectionEnd;
-          textarea.value = textarea.value.substring(0, start) + '    ' + textarea.value.substring(end);
-          textarea.selectionStart = textarea.selectionEnd = start + 4;
-          updateStats();
-        }
-      });
-    }
-
-    if (saveBtn) {
-      saveBtn.addEventListener('click', saveEditorContent);
-    }
-
-    async function saveEditorContent() {
-      const filename = (filenameInput.value || '').trim();
-      if (!filename) {
-        alert('저장할 파일명을 입력해주세요.');
-        return;
-      }
-      const content = textarea.value;
-      try {
-        const res = await fetch('/api/files/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename, content })
-        });
-        const data = await res.json();
-        if (data.success) {
-          if (saveStatus) {
-            saveStatus.textContent = '저장됨 ✓';
-            saveStatus.classList.add('green');
-          }
-          const winTitle = document.getElementById('editor-win-title');
-          if (winTitle) winTitle.textContent = `Pulse 에디터 — ${filename}`;
-          showToast(`'${filename}' 파일이 정상 저장되었습니다.`);
-          fetchFiles().then(() => renderFinderFiles());
-        } else {
-          alert('저장 실패: ' + (data.error || '알 수 없는 오류'));
-        }
-      } catch (err) {
-        alert('저장 통신 오류: ' + err.message);
-      }
-    }
+  async function canLeaveEditor() {
+    if (state.editorBusy) { showToast('파일을 불러오거나 저장하는 중입니다. 잠시 기다려주세요.'); return false; }
+    return !state.editorDirty || Boolean(await Pulse.ask('저장하지 않은 변경 내용이 있습니다. 변경 내용을 버리고 계속할까요?', { confirm: '변경 버리기' }));
   }
 
-  function openEditorWithFile(filename) {
-    const filenameInput = document.getElementById('editor-filename-input');
+  function editorStats() {
+    const text = document.getElementById('editor-textarea').value;
+    const lines = text.split('\n').length;
+    document.getElementById('editor-stats-badge').textContent = `${lines}줄 | ${text.length}자`;
+    document.getElementById('editor-gutter').textContent = Array.from({ length: Math.min(lines, 10000) }, (_, i) => i + 1).join('\n');
+  }
+  function editorBusy(busy) {
+    state.editorBusy = busy;
+    document.getElementById('editor-textarea').readOnly = busy || !Pulse.isAdmin;
+    document.getElementById('editor-filename-input').disabled = busy || !Pulse.isAdmin;
+    document.getElementById('btn-editor-save').disabled = busy || !Pulse.isAdmin;
+  }
+  function setupEditorLogic() {
     const textarea = document.getElementById('editor-textarea');
-    const gutter = document.getElementById('editor-gutter');
-    const winTitle = document.getElementById('editor-win-title');
-    const saveStatus = document.getElementById('editor-save-status');
-
-    if (filenameInput) filenameInput.value = filename;
-    if (winTitle) winTitle.textContent = `Pulse 에디터 — ${filename}`;
-    if (saveStatus) {
-      saveStatus.textContent = '불러오는 중...';
-      saveStatus.classList.remove('green');
-    }
-
-    fetch(`/api/preview/${encodeURIComponent(filename)}`)
-      .then(res => res.text())
-      .then(text => {
-        if (textarea) textarea.value = text;
-        const lines = text.split('\n');
-        if (gutter) gutter.innerHTML = Array.from({ length: lines.length }, (_, i) => i + 1).join('<br>');
-        const stats = document.getElementById('editor-stats-badge');
-        if (stats) stats.textContent = `${lines.length}줄 | ${text.length}자`;
-        if (saveStatus) {
-          saveStatus.textContent = '저장됨 ✓';
-          saveStatus.classList.add('green');
-        }
-        openDesktopWindow('editor');
-      })
-      .catch(err => {
-        alert('파일을 불러올 수 없습니다: ' + err.message);
-      });
+    const filename = document.getElementById('editor-filename-input');
+    const dirty = () => {
+      state.editorDirty = true;
+      document.getElementById('editor-save-status').textContent = '저장 안 됨';
+      document.getElementById('editor-save-status').classList.remove('green');
+      editorStats();
+    };
+    textarea.addEventListener('input', dirty);
+    filename.addEventListener('input', dirty);
+    textarea.addEventListener('scroll', () => { document.getElementById('editor-gutter').scrollTop = textarea.scrollTop; });
+    textarea.addEventListener('keydown', event => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault(); saveEditorContent();
+      }
+      if (event.key === 'Tab' && !textarea.readOnly) {
+        event.preventDefault();
+        textarea.setRangeText('    ', textarea.selectionStart, textarea.selectionEnd, 'end');
+        dirty();
+      }
+    });
+    document.getElementById('btn-editor-save').addEventListener('click', saveEditorContent);
+    window.addEventListener('beforeunload', event => {
+      if (state.editorDirty || state.editorBusy) { event.preventDefault(); event.returnValue = ''; }
+    });
+    editorBusy(false);
+  }
+  async function saveEditorContent() {
+    if (state.editorBusy || !Pulse.isAdmin) return;
+    const filename = document.getElementById('editor-filename-input').value.trim();
+    if (!filename) { showToast('저장할 파일명을 입력하세요.'); return; }
+    editorBusy(true);
+    const status = document.getElementById('editor-save-status');
+    status.textContent = '저장 중…';
+    try {
+      await Pulse.post('/api/files/save', { filename, content: document.getElementById('editor-textarea').value });
+      state.editorDirty = false;
+      state.editorSavedText = document.getElementById('editor-textarea').value;
+      state.editorSavedPath = filename;
+      status.textContent = '저장됨 ✓';
+      status.classList.add('green');
+      document.getElementById('editor-win-title').textContent = `Pulse 에디터 — ${filename}`;
+      fetchFiles();
+      fetchStorageStats();
+    } catch (error) {
+      status.textContent = '저장 실패 · 다시 시도하세요';
+      showToast(error.message, saveEditorContent);
+    } finally { editorBusy(false); }
+  }
+  async function openEditorWithFile(filename) {
+    if (!await canLeaveEditor() || state.editorBusy) return;
+    editorBusy(true);
+    const status = document.getElementById('editor-save-status');
+    status.textContent = '불러오는 중…';
+    try {
+      const response = await fetch('/api/preview/' + encodeURIComponent(filename));
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || '파일을 불러올 수 없습니다.');
+      }
+      const content = await response.text();
+      document.getElementById('editor-textarea').value = content;
+      document.getElementById('editor-filename-input').value = filename;
+      document.getElementById('editor-win-title').textContent = `Pulse 에디터 — ${filename}`;
+      state.editorDirty = false;
+      state.editorSavedText = content;
+      state.editorSavedPath = filename;
+      editorStats();
+      status.textContent = Pulse.isAdmin ? '저장됨 ✓' : '읽기 전용';
+      status.classList.add('green');
+      openDesktopWindow('editor');
+    } catch (error) {
+      status.textContent = '불러오기 실패 · 기존 내용 유지';
+      status.classList.remove('green');
+      showToast(error.message, () => openEditorWithFile(filename));
+    } finally { editorBusy(false); }
   }
 
   // [App 4: Activity Monitor Widget]
@@ -2067,8 +2298,8 @@
     const cpuBar = document.getElementById('mon-cpu-bar');
     const cpuDetail = document.getElementById('mon-cpu-detail');
     if (cpuPct && d.cpu) {
-      cpuPct.textContent = `${d.cpu.percent}%`;
-      cpuBar.style.width = `${d.cpu.percent}%`;
+      cpuPct.textContent = metricPercent(d.cpu);
+      cpuBar.style.width = `${d.cpu.percent || 0}%`;
       cpuDetail.textContent = `코어: ${d.cpu.cores}개 | 1분 부하: ${d.cpu.load1}`;
     }
 
@@ -2076,8 +2307,8 @@
     const memBar = document.getElementById('mon-mem-bar');
     const memDetail = document.getElementById('mon-mem-detail');
     if (memPct && d.memory) {
-      memPct.textContent = `${d.memory.percent}%`;
-      memBar.style.width = `${d.memory.percent}%`;
+      memPct.textContent = metricPercent(d.memory);
+      memBar.style.width = `${d.memory.percent || 0}%`;
       memDetail.textContent = `사용: ${d.memory.usedFormatted} / ${d.memory.totalFormatted}`;
     }
 
@@ -2085,8 +2316,8 @@
     const batBar = document.getElementById('mon-bat-bar');
     const batDetail = document.getElementById('mon-bat-detail');
     if (batPct && d.battery) {
-      const pct = d.battery.percentage !== null ? d.battery.percentage : 100;
-      batPct.textContent = `${pct}%`;
+      const pct = d.battery.percentage !== null ? d.battery.percentage : 0;
+      batPct.textContent = d.battery.supported ? `${pct}%` : '측정 불가';
       batBar.style.width = `${pct}%`;
       batDetail.textContent = `상태: ${d.battery.status} (${d.battery.plugged})`;
     }
@@ -2170,23 +2401,27 @@
     const setupView = document.getElementById('vnc-setup-view');
     const activeView = document.getElementById('vnc-active-view');
     const iframe = document.getElementById('vnc-iframe');
-
     try {
-      const res = await fetch('/api/system/vnc-status');
-      const data = await res.json();
-      if (data.running) {
-        setupView.classList.add('hidden');
-        activeView.classList.remove('hidden');
-        const host = (state.dashboardData && state.dashboardData.network) ? state.dashboardData.network.localIp : window.location.hostname;
-        iframe.src = `http://${host}:6080/vnc.html?autoconnect=true`;
-      } else {
-        activeView.classList.add('hidden');
-        setupView.classList.remove('hidden');
-        iframe.src = '';
-      }
-    } catch (e) {
+      const data = await Pulse.api('/api/system/vnc-status');
+      const saved = localStorage.getItem('pulse_vnc_url');
+      if (!data.running && !data.url && !saved) throw new Error('Linux 데스크톱이 실행되지 않았습니다. Termux에서 setup-desktop.sh start를 실행하세요.');
+      const defaultUrl = new URL(location.origin);
+      defaultUrl.port = String(data.port);
+      defaultUrl.pathname = '/vnc.html';
+      const url = new URL(saved || data.url || defaultUrl.href);
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('HTTP 또는 HTTPS 주소를 입력하세요.');
+      if (location.protocol === 'https:' && url.protocol !== 'https:') throw new Error('HTTPS 접속에서는 Linux 데스크톱도 HTTPS 주소가 필요합니다. 연결 주소를 설정하세요.');
+      url.searchParams.set('autoconnect', 'true');
+      iframe.src = url.href;
+      document.getElementById('btn-open-vnc-tab').href = url.href;
+      setupView.classList.add('hidden');
+      activeView.classList.remove('hidden');
+      showToast('연결 화면을 열었습니다. 연결되지 않으면 주소와 noVNC 서버를 확인하세요.');
+    } catch (error) {
+      iframe.src = '';
       activeView.classList.add('hidden');
       setupView.classList.remove('hidden');
+      showToast(error.message, checkVncStatus);
     }
   }
 
@@ -2215,21 +2450,30 @@
   }
 
   // ================= Utilities =================
-  function showToast(message) {
+  function showToast(message, retry, actionLabel = '다시 시도') {
     const toast = document.createElement('div');
     toast.className = 'toast';
     toast.innerHTML = `
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
       <span>${escapeHtml(message)}</span>
     `;
+    toast.setAttribute('role', 'status');
+    if (retry) {
+      const button = document.createElement('button');
+      button.className = 'btn btn-outline';
+      button.textContent = actionLabel;
+      button.addEventListener('click', () => { toast.remove(); retry(); });
+      toast.appendChild(button);
+    }
     el.toastContainer.appendChild(toast);
     setTimeout(() => {
       if (toast.parentNode) toast.parentNode.removeChild(toast);
-    }, 3000);
+    }, retry ? 10000 : 4000);
   }
 
   function getTypeLabel(type) {
     const labels = {
+      folder: '폴더',
       image: '사진',
       video: '비디오',
       document: '문서/텍스트',
@@ -2242,6 +2486,7 @@
 
   function getFileTypeIconSvg(type) {
     switch (type) {
+      case 'folder': return Pulse.icon('finder');
       case 'document':
         return `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>`;
       case 'pdf':

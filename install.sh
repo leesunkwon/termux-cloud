@@ -64,12 +64,18 @@ fi
 # Python Flask 라이브러리 설치
 echo -e "\n${BLUE}[3/5] 🐍 Python 웹 서버 라이브러리(Flask) 설치 중...${NC}"
 if command -v pip3 &>/dev/null; then
-    pip3 install flask werkzeug
+    pip3 install -r requirements.txt
 elif command -v pip &>/dev/null; then
-    pip install flask werkzeug
+    pip install -r requirements.txt
 else
     echo -e "${RED}[!] pip을 찾을 수 없습니다. Python 환경을 확인해주세요.${NC}"
     exit 1
+fi
+
+# Register credentials locally before exposing the server.
+if [ ! -f "$SCRIPT_DIR/.pulse/accounts.json" ]; then
+    echo "Pulse 관리자 계정을 등록합니다. 비밀번호는 화면에 표시되지 않습니다."
+    python3 "$SCRIPT_DIR/setup-auth.py"
 fi
 
 # 스크립트 실행 권한 부여
@@ -106,7 +112,7 @@ case "\$1" in
         ./status.sh
         ;;
     update)
-        ./update.sh
+        ./update.sh "\${@:2}"
         ;;
     *)
         ./start.sh "\$@"

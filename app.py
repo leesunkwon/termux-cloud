@@ -5,25 +5,26 @@ import platform
 import sys
 import subprocess
 import json
+import threading
+import time
+import signal
+import uuid
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory, send_file, abort
-from werkzeug.utils import secure_filename
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
-APP_VERSION = 'v1.4.0'
+APP_VERSION = 'v1.5.0'
+INSTANCE_ID = uuid.uuid4().hex
 SERVER_START_TIME = datetime.now()
 
 # 저장 경로 설정 (환경변수로 변경 가능: 예: STORAGE_PATH=/sdcard/MyCloud)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_STORAGE_DIR = os.path.join(BASE_DIR, 'uploads')
-STORAGE_DIR = os.environ.get('STORAGE_PATH', DEFAULT_STORAGE_DIR)
+STORAGE_DIR = os.path.abspath(os.path.expanduser(os.environ.get('STORAGE_PATH', DEFAULT_STORAGE_DIR)))
 
 # 저장 폴더가 없으면 생성
 os.makedirs(STORAGE_DIR, exist_ok=True)
-
-# 가상 터미널 기본 작업 디렉토리
-SESSION_CWD = os.path.expanduser('~') if os.path.exists(os.path.expanduser('~')) else BASE_DIR
 
 # 2GB 최대 업로드 제한 (필요시 조절 가능)
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024
@@ -80,238 +81,77 @@ def get_file_type(filename):
 def index():
     return send_from_directory('public', 'index.html')
 
-@app.route('/api/files', methods=['GET'])
-def list_files():
-    try:
-        files = []
-        for filename in os.listdir(STORAGE_DIR):
-            if filename.startswith('.'):
-                continue
-            filepath = os.path.join(STORAGE_DIR, filename)
-            if os.path.isfile(filepath):
-                stat = os.stat(filepath)
-                file_type = get_file_type(filename)
-                files.append({
-                    'name': filename,
-                    'size': stat.st_size,
-                    'sizeFormatted': format_size(stat.st_size),
-                    'modified': int(stat.st_mtime * 1000),
-                    'dateFormatted': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M'),
-                    'type': file_type,
-                    'isText': is_text_file(filename),
-                    'extension': os.path.splitext(filename)[1].lower().lstrip('.'),
-                    'previewUrl': f'/api/preview/{filename}',
-                    'downloadUrl': f'/api/download/{filename}'
-                })
-        
-        # 최신 수정일순 정렬
-        files.sort(key=lambda x: x['modified'], reverse=True)
-        return jsonify({'success': True, 'files': files})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/upload', methods=['POST'])
-def upload_files():
-    if 'files' not in request.files and 'file' not in request.files:
-        return jsonify({'success': False, 'error': 'No file uploaded'}), 400
-
-    uploaded_files = request.files.getlist('files')
-    if not uploaded_files or uploaded_files[0].filename == '':
-        single_file = request.files.get('file')
-        if single_file and single_file.filename != '':
-            uploaded_files = [single_file]
-        else:
-            return jsonify({'success': False, 'error': 'Empty filename'}), 400
-
-    saved_list = []
-    for file_obj in uploaded_files:
-        if file_obj and file_obj.filename:
-            orig_name = os.path.basename(file_obj.filename)
-            safe_name = os.path.basename(orig_name).strip()
-            if not safe_name:
-                safe_name = f"upload_{int(datetime.now().timestamp())}"
-
-            target_path = os.path.join(STORAGE_DIR, safe_name)
-            
-            # 동일한 파일명이 존재할 경우 이름 변경 (예: photo (1).jpg)
-            if os.path.exists(target_path):
-                name, ext = os.path.splitext(safe_name)
-                counter = 1
-                while os.path.exists(os.path.join(STORAGE_DIR, f"{name} ({counter}){ext}")):
-                    counter += 1
-                safe_name = f"{name} ({counter}){ext}"
-                target_path = os.path.join(STORAGE_DIR, safe_name)
-
-            file_obj.save(target_path)
-            stat = os.stat(target_path)
-            saved_list.append({
-                'name': safe_name,
-                'size': stat.st_size,
-                'sizeFormatted': format_size(stat.st_size),
-                'type': get_file_type(safe_name)
-            })
-
-    return jsonify({'success': True, 'uploaded': saved_list})
-
-@app.route('/api/download/<path:filename>', methods=['GET'])
-def download_file(filename):
-    safe_name = os.path.basename(filename)
-    filepath = os.path.join(STORAGE_DIR, safe_name)
-    if not os.path.exists(filepath) or not os.path.isfile(filepath):
-        abort(404, description="File not found")
-    return send_file(filepath, as_attachment=True, download_name=safe_name)
-
-@app.route('/api/preview/<path:filename>', methods=['GET'])
-def preview_file(filename):
-    safe_name = os.path.basename(filename)
-    filepath = os.path.join(STORAGE_DIR, safe_name)
-    if not os.path.exists(filepath) or not os.path.isfile(filepath):
-        abort(404, description="File not found")
-    if is_text_file(safe_name):
-        return send_file(filepath, mimetype='text/plain; charset=utf-8', as_attachment=False)
-    mime, _ = mimetypes.guess_type(filepath)
-    return send_file(filepath, mimetype=mime or 'application/octet-stream', as_attachment=False)
-
-@app.route('/api/files/<path:filename>', methods=['DELETE'])
-def delete_file(filename):
-    safe_name = os.path.basename(filename)
-    filepath = os.path.join(STORAGE_DIR, safe_name)
-    if not os.path.exists(filepath) or not os.path.isfile(filepath):
-        return jsonify({'success': False, 'error': 'File not found'}), 404
-    try:
-        os.remove(filepath)
-        return jsonify({'success': True, 'deleted': safe_name})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-# 파일 내용 저장 API (웹 코드/텍스트 에디터용)
-@app.route('/api/files/save', methods=['POST'])
-def save_file_content():
-    try:
-        data = request.get_json(force=True) or {}
-        filename = data.get('filename', '').strip()
-        content = data.get('content', '')
-        if not filename:
-            return jsonify({'success': False, 'error': '파일명이 지정되지 않았습니다.'}), 400
-
-        safe_name = os.path.basename(filename)
-        filepath = os.path.join(STORAGE_DIR, safe_name)
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(content)
-
-        stat = os.stat(filepath)
-        return jsonify({
-            'success': True,
-            'filename': safe_name,
-            'size': stat.st_size,
-            'sizeFormatted': format_size(stat.st_size),
-            'modified': int(stat.st_mtime * 1000)
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-# 새 파일 생성 API (가상 데스크탑 및 클라우드용)
-@app.route('/api/files/create', methods=['POST'])
-def create_empty_file():
-    try:
-        data = request.get_json(force=True) or {}
-        filename = data.get('filename', '').strip()
-        content = data.get('content', '')
-        if not filename:
-            return jsonify({'success': False, 'error': '파일명이 지정되지 않았습니다.'}), 400
-
-        safe_name = os.path.basename(filename)
-        filepath = os.path.join(STORAGE_DIR, safe_name)
-        if os.path.exists(filepath):
-            return jsonify({'success': False, 'error': '이미 동일한 이름의 파일이 존재합니다.'}), 400
-
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(content)
-
-        stat = os.stat(filepath)
-        return jsonify({
-            'success': True,
-            'filename': safe_name,
-            'size': stat.st_size,
-            'sizeFormatted': format_size(stat.st_size),
-            'modified': int(stat.st_mtime * 1000)
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+from pulse_auth import configure_auth
+from pulse_files import register_files
+configure_auth(app)
+register_files(app, STORAGE_DIR, get_file_type, is_text_file, format_size)
+TERMINAL_LOCK = threading.Lock()
+UPDATE_LOCK = threading.Lock()
+UPDATE_CACHE = {'time': 0, 'value': None}
 
 # 가상 터미널 쉘 명령어 실행 API
 @app.route('/api/terminal/exec', methods=['POST'])
 def terminal_exec():
-    global SESSION_CWD
+    current_dir = BASE_DIR
+    if not TERMINAL_LOCK.acquire(blocking=False):
+        return jsonify(success=False, output='다른 명령이 실행 중입니다.', exitCode=1), 409
     try:
-        data = request.get_json(force=True) or {}
-        raw_cmd = data.get('command', '').strip()
-        client_cwd = data.get('cwd', '').strip()
-
-        current_dir = client_cwd if (client_cwd and os.path.isdir(client_cwd)) else SESSION_CWD
-        if not os.path.isdir(current_dir):
-            current_dir = BASE_DIR
-
-        if not raw_cmd:
-            return jsonify({
-                'success': True,
-                'output': '',
-                'cwd': current_dir,
-                'exitCode': 0
-            })
-
-        # 'cd' 명령어 특별 처리 (디렉토리 이동)
+        data = request.get_json(silent=True) or {}
+        raw_cmd = data.get('command', '')
+        client_cwd = data.get('cwd', '')
+        if not isinstance(raw_cmd, str) or not isinstance(client_cwd, str) or len(raw_cmd) > 8192:
+            return jsonify(success=False, output='명령이 올바르지 않습니다.', exitCode=1), 400
+        raw_cmd = raw_cmd.strip()
+        current_dir = client_cwd if os.path.isdir(client_cwd) else os.path.expanduser('~')
         if raw_cmd == 'cd' or raw_cmd.startswith('cd '):
-            parts = raw_cmd.split(maxsplit=1)
-            target = parts[1].strip() if len(parts) > 1 else os.path.expanduser('~')
-            target = os.path.expanduser(target.strip('"\''))
+            import shlex
+            parts = shlex.split(raw_cmd)
+            if len(parts) > 2:
+                return jsonify(success=False, output='cd 명령은 단독으로 사용하세요.', cwd=current_dir, exitCode=1)
+            target = os.path.expanduser(parts[1]) if len(parts) > 1 else os.path.expanduser('~')
             new_path = os.path.normpath(os.path.join(current_dir, target))
-            if os.path.isdir(new_path):
-                SESSION_CWD = new_path
-                return jsonify({
-                    'success': True,
-                    'output': '',
-                    'cwd': new_path,
-                    'exitCode': 0
-                })
-            else:
-                return jsonify({
-                    'success': False,
-                    'output': f"cd: 디렉터리를 찾을 수 없습니다: {parts[1] if len(parts) > 1 else ''}\n",
-                    'cwd': current_dir,
-                    'exitCode': 1
-                })
-
-        # 일반 쉘 명령어 실행 (최대 15초 타임아웃)
-        proc = subprocess.run(
-            raw_cmd,
-            shell=True,
-            cwd=current_dir,
-            capture_output=True,
-            text=True,
-            timeout=15
-        )
-        output = proc.stdout + proc.stderr
-        return jsonify({
-            'success': proc.returncode == 0,
-            'output': output,
-            'cwd': current_dir,
-            'exitCode': proc.returncode
-        })
-    except subprocess.TimeoutExpired:
-        return jsonify({
-            'success': False,
-            'output': '명령어 실행 시간이 초과되었습니다 (최대 15초 제한).\n',
-            'cwd': current_dir,
-            'exitCode': 124
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'output': f"명령 실행 오류: {str(e)}\n",
-            'cwd': current_dir,
-            'exitCode': 1
-        })
+            if not os.path.isdir(new_path):
+                return jsonify(success=False, output='디렉터리를 찾을 수 없습니다.', cwd=current_dir, exitCode=1)
+            return jsonify(success=True, output='', cwd=new_path, exitCode=0)
+        # Drain output continuously; retain at most 1MB in memory.
+        proc = subprocess.Popen(raw_cmd, shell=True, cwd=current_dir, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+        chunks = bytearray()
+        def drain():
+            while True:
+                chunk = proc.stdout.read(8192)
+                if not chunk:
+                    break
+                if len(chunks) < 1024 * 1024:
+                    chunks.extend(chunk[:1024 * 1024 - len(chunks)])
+        reader = threading.Thread(target=drain, daemon=True)
+        reader.start()
+        timed_out = False
+        try:
+            proc.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+        finally:
+            # Also terminate descendants that outlive the shell and hold stdout open.
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.wait()
+            reader.join(timeout=2)
+            if not reader.is_alive():
+                proc.stdout.close()
+        output = chunks.decode('utf-8', errors='replace')
+        if len(chunks) >= 1024 * 1024:
+            output += '\n[출력을 1MB로 제한했습니다.]'
+        if timed_out:
+            output += '\n[15초 제한으로 명령을 종료했습니다.]'
+        return jsonify(success=not timed_out and proc.returncode == 0, output=output,
+                       cwd=current_dir, exitCode=124 if timed_out else proc.returncode)
+    except Exception as error:
+        return jsonify(success=False, output=str(error), cwd=current_dir, exitCode=1), 400
+    finally:
+        TERMINAL_LOCK.release()
 
 # noVNC / VNC 서버 연결 상태 확인 API
 @app.route('/api/system/vnc-status', methods=['GET'])
@@ -330,29 +170,64 @@ def check_vnc_status():
     return jsonify({
         'success': True,
         'running': is_open,
-        'port': port
+        'port': port,
+        'url': os.environ.get('VNC_PUBLIC_URL', '')
     })
+
+def visible_files():
+    for folder, dirs, files in os.walk(STORAGE_DIR, followlinks=False):
+        dirs[:] = [name for name in dirs if not name.startswith('.') and not os.path.islink(os.path.join(folder, name))]
+        for name in files:
+            path = os.path.join(folder, name)
+            if not name.startswith('.') and not os.path.islink(path):
+                yield name, path
+
+STATS_LOCK = threading.Lock()
+STATS_CACHE = {'time': 0, 'value': None}
+
+def file_statistics():
+    with STATS_LOCK:
+        if STATS_CACHE['value'] is not None and time.monotonic() - STATS_CACHE['time'] < 15:
+            return STATS_CACHE['value']
+        counts = dict(total=0, image=0, video=0, document=0, audio=0, other=0)
+        sizes = dict(image=0, video=0, document=0, audio=0, other=0)
+        used = 0
+        for name, path in visible_files():
+            try:
+                size = os.path.getsize(path)
+            except OSError:
+                continue
+            kind = get_file_type(name)
+            kind = kind if kind in sizes else 'other'
+            counts[kind] += 1
+            counts['total'] += 1
+            sizes[kind] += size
+            used += size
+        STATS_CACHE.update(time=time.monotonic(), value=(used, counts, sizes))
+        return STATS_CACHE['value']
+
+from functools import wraps
+
+def cached_json(seconds):
+    def decorate(fn):
+        cache = {'time': 0, 'value': None}
+        lock = threading.Lock()
+        @wraps(fn)
+        def wrapped():
+            with lock:
+                if cache['value'] is not None and time.monotonic() - cache['time'] < seconds:
+                    return jsonify(cache['value'])
+                response = fn()
+                if hasattr(response, 'get_json') and response.status_code == 200:
+                    cache.update(time=time.monotonic(), value=response.get_json())
+                return response
+        return wrapped
+    return decorate
 
 @app.route('/api/storage', methods=['GET'])
 def storage_info():
     try:
-        used_cloud = 0
-        file_counts = {'total': 0, 'image': 0, 'video': 0, 'document': 0, 'audio': 0, 'other': 0}
-        type_sizes = {'image': 0, 'video': 0, 'document': 0, 'audio': 0, 'other': 0}
-
-        for fname in os.listdir(STORAGE_DIR):
-            fpath = os.path.join(STORAGE_DIR, fname)
-            if os.path.isfile(fpath):
-                sz = os.path.getsize(fpath)
-                used_cloud += sz
-                ftype = get_file_type(fname)
-                if ftype in file_counts:
-                    file_counts[ftype] += 1
-                    type_sizes[ftype] += sz
-                else:
-                    file_counts['other'] += 1
-                    type_sizes['other'] += sz
-                file_counts['total'] += 1
+        used_cloud, file_counts, type_sizes = file_statistics()
 
         total, used, free = shutil.disk_usage(STORAGE_DIR)
 
@@ -376,7 +251,13 @@ def storage_info():
 # 브라우저 캐시 방지 (HTML/CSS/JS 수정 시 새로고침하면 즉시 반영되도록)
 @app.after_request
 def add_no_cache_header(response):
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+    if request.method in ('POST', 'DELETE') and request.path.startswith(('/api/files', '/api/folders', '/api/trash', '/api/upload')):
+        STATS_CACHE['time'] = 0
+    if not request.path.startswith('/api/thumbnail/'):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    if request.path.startswith('/api/preview/'):
+        response.headers["Content-Security-Policy"] = "sandbox"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
@@ -384,7 +265,14 @@ def add_no_cache_header(response):
 # 원격 Git 업데이트 확인 API (백그라운드 감지용)
 @app.route('/api/system/check-update', methods=['GET'])
 def check_update():
-    import subprocess
+    with UPDATE_LOCK:
+        if UPDATE_CACHE['value'] is not None and time.monotonic() - UPDATE_CACHE['time'] < 300:
+            return jsonify(UPDATE_CACHE['value'])
+        result = perform_update_check()
+        UPDATE_CACHE.update(time=time.monotonic(), value=result.get_json())
+        return result
+
+def perform_update_check():
     try:
         git_dir = os.path.join(BASE_DIR, '.git')
         if not os.path.exists(git_dir):
@@ -405,7 +293,7 @@ def check_update():
         local_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=BASE_DIR, text=True).strip()
         remote_hash = subprocess.check_output(['git', 'rev-parse', 'origin/main'], cwd=BASE_DIR, text=True).strip()
 
-        has_update = (local_hash != remote_hash)
+        has_update = int(subprocess.check_output(['git', 'rev-list', '--count', 'HEAD..origin/main'], cwd=BASE_DIR, text=True).strip()) > 0
         behind_count = 0
         latest_message = ""
 
@@ -443,25 +331,38 @@ def check_update():
 # 웹 UI에서 직접 최신 코드로 업데이트하는 API (Git 기반)
 @app.route('/api/system/update', methods=['POST'])
 def system_update():
-    import subprocess
+    if not UPDATE_LOCK.acquire(blocking=False):
+        return jsonify(success=False, error='업데이트 확인 또는 적용이 진행 중입니다.'), 409
     try:
-        # git pull 실행
-        result = subprocess.run(
-            ['git', 'pull', 'origin', 'main'],
-            cwd=BASE_DIR,
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-        output = result.stdout + result.stderr
-        is_already_latest = "Already up to date." in output or "이미 최신 상태입니다" in output
-        return jsonify({
-            'success': result.returncode == 0,
-            'output': output.strip(),
-            'alreadyLatest': is_already_latest
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        dirty = subprocess.check_output(['git', 'status', '--porcelain'], cwd=BASE_DIR, text=True)
+        if dirty.strip():
+            return jsonify(success=False, error='커밋하지 않은 변경이 있습니다. 서버에서 먼저 정리하세요.'), 409
+        result = subprocess.run(['git', 'pull', '--ff-only', 'origin', 'main'], cwd=BASE_DIR,
+                                capture_output=True, text=True, timeout=60)
+        UPDATE_CACHE['time'] = 0
+        return jsonify(success=result.returncode == 0, output=(result.stdout + result.stderr).strip(),
+                       stage='downloaded' if result.returncode == 0 else 'failed',
+                       restartSupported=os.environ.get('PULSE_MANAGED') == '1', instanceId=INSTANCE_ID)
+    except Exception as error:
+        return jsonify(success=False, error=str(error)), 500
+    finally:
+        UPDATE_LOCK.release()
+
+@app.post('/api/system/restart')
+def restart_server():
+    if TERMINAL_LOCK.locked() or app.extensions['pulse_file_lock'].locked():
+        return jsonify(success=False, error='명령 실행 또는 파일 작업이 끝난 뒤 다시 시도하세요.'), 409
+    if os.environ.get('PULSE_MANAGED') != '1':
+        return jsonify(success=False, error='Termux에서 ./stop.sh 후 ./start.sh --bg로 재시작하세요.'), 409
+    def restart():
+        time.sleep(1)
+        os.execv(sys.executable, [sys.executable, os.path.join(BASE_DIR, 'app.py')])
+    threading.Thread(target=restart, daemon=True).start()
+    return jsonify(success=True, stage='restarting', instanceId=INSTANCE_ID)
+
+@app.get('/api/system/health')
+def health():
+    return jsonify(success=True, version=APP_VERSION, instanceId=INSTANCE_ID)
 
 def get_local_ip():
     import socket
@@ -485,6 +386,8 @@ def get_system_memory():
                     if len(parts) == 2:
                         meminfo[parts[0].strip()] = parts[1].strip()
             total_kb = int(meminfo.get('MemTotal', '0 kB').split()[0])
+            if total_kb <= 0:
+                raise ValueError('메모리 측정값 없음')
             avail_kb = int(meminfo.get('MemAvailable', meminfo.get('MemFree', '0 kB')).split()[0])
             used_kb = max(0, total_kb - avail_kb)
             total_b = total_kb * 1024
@@ -497,61 +400,61 @@ def get_system_memory():
                 'freeFormatted': format_size(free_b),
                 'totalBytes': total_b,
                 'usedBytes': used_b,
-                'percent': pct
+                'percent': pct,
+                'measurement': 'measured'
             }
     except Exception:
         pass
 
-    try:
-        out = subprocess.check_output(['sysctl', '-n', 'hw.memsize'], text=True).strip()
-        total_b = int(out)
-        used_b = int(total_b * 0.45)
-        return {
-            'totalFormatted': format_size(total_b),
-            'usedFormatted': format_size(used_b),
-            'freeFormatted': format_size(total_b - used_b),
-            'totalBytes': total_b,
-            'usedBytes': used_b,
-            'percent': 45.0
-        }
-    except Exception:
-        return {
-            'totalFormatted': '기기 기본값',
-            'usedFormatted': '정상',
-            'freeFormatted': '충분함',
-            'totalBytes': 0,
-            'usedBytes': 0,
-            'percent': 35.0
-        }
+    return {'totalFormatted': '측정 불가', 'usedFormatted': '측정 불가',
+            'freeFormatted': '측정 불가', 'totalBytes': None, 'usedBytes': None,
+            'percent': None, 'measurement': 'unavailable'}
+
+CPU_SAMPLE = None
+CPU_LOCK = threading.Lock()
 
 def get_cpu_info():
-    cores = os.cpu_count() or 4
-    load = [0.0, 0.0, 0.0]
-    if hasattr(os, 'getloadavg'):
-        try:
-            load = list(os.getloadavg())
-        except Exception:
-            pass
-    calc_pct = min(100.0, max(5.0, round((load[0] / cores) * 100, 1)))
-    return {
-        'cores': cores,
-        'load1': round(load[0], 2),
-        'load5': round(load[1], 2),
-        'load15': round(load[2], 2),
-        'percent': calc_pct
-    }
+    global CPU_SAMPLE
+    cores = os.cpu_count() or 1
+    try:
+        load = os.getloadavg()
+    except (AttributeError, OSError):
+        load = (None, None, None)
+    percent = None
+    measurement = 'unavailable'
+    try:
+        with CPU_LOCK:
+            with open('/proc/stat') as source:
+                values = [int(value) for value in source.readline().split()[1:9]]
+            total, idle = sum(values), values[3] + values[4]
+            if CPU_SAMPLE and total > CPU_SAMPLE[0]:
+                percent = round(100 * (1 - (idle - CPU_SAMPLE[1]) / (total - CPU_SAMPLE[0])), 1)
+                percent = min(100, max(0, percent))
+                measurement = 'measured'
+            else:
+                measurement = 'sampling'
+            CPU_SAMPLE = (total, idle)
+    except (OSError, ValueError, IndexError):
+        if load[0] is not None:
+            percent = round(min(100, load[0] / cores * 100), 1)
+            measurement = 'estimated'
+    return dict(cores=cores, percent=percent, measurement=measurement,
+                load1=load[0], load5=load[1], load15=load[2])
 
 def get_battery_info():
     try:
         res = subprocess.run(['termux-battery-status'], capture_output=True, text=True, timeout=2)
         if res.returncode == 0:
             bdata = json.loads(res.stdout)
+            percentage = bdata.get('percentage')
+            if not isinstance(percentage, (int, float)) or not 0 <= percentage <= 100:
+                raise ValueError('배터리 측정값 없음')
             return {
                 'supported': True,
-                'percentage': bdata.get('percentage', 100),
-                'plugged': bdata.get('plugged', 'UNPLUGGED'),
-                'status': bdata.get('status', 'DISCHARGING'),
-                'temperature': round(bdata.get('temperature', 25.0), 1),
+                'percentage': percentage,
+                'plugged': bdata.get('plugged', '확인 불가'),
+                'status': bdata.get('status', '확인 불가'),
+                'temperature': round(bdata['temperature'], 1) if isinstance(bdata.get('temperature'), (int, float)) else None,
                 'health': bdata.get('health', 'GOOD')
             }
     except Exception:
@@ -559,8 +462,8 @@ def get_battery_info():
     return {
         'supported': False,
         'percentage': None,
-        'plugged': '전원 상시 연결',
-        'status': '안정',
+        'plugged': '확인 불가',
+        'status': '측정 불가',
         'temperature': None,
         'health': 'GOOD'
     }
@@ -591,26 +494,14 @@ def get_uptime_info():
 
 # 대시보드 종합 상태 조회 API
 @app.route('/api/system/dashboard', methods=['GET'])
+@cached_json(5)
 def get_dashboard_data():
     try:
         port = int(os.environ.get('PORT', 3000))
         total, used, free = shutil.disk_usage(STORAGE_DIR)
         disk_pct = round((used / total) * 100, 1) if total > 0 else 0
 
-        # 파일 통계
-        file_counts = {'total': 0, 'image': 0, 'video': 0, 'document': 0, 'audio': 0, 'other': 0}
-        used_cloud = 0
-        for fname in os.listdir(STORAGE_DIR):
-            fpath = os.path.join(STORAGE_DIR, fname)
-            if os.path.isfile(fpath):
-                sz = os.path.getsize(fpath)
-                used_cloud += sz
-                ftype = get_file_type(fname)
-                if ftype in file_counts:
-                    file_counts[ftype] += 1
-                else:
-                    file_counts['other'] += 1
-                file_counts['total'] += 1
+        used_cloud, file_counts, _ = file_statistics()
 
         is_termux = os.path.exists('/data/data/com.termux') or 'com.termux' in os.environ.get('PREFIX', '')
 
@@ -703,8 +594,8 @@ def get_changelog():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 3000))
-    # DEBUG 모드 지원 (기본 True로 설정하여 파일 수정 시 서버가 자동으로 리로드되도록 함)
-    is_debug = os.environ.get('DEBUG', 'true').lower() in ['true', '1', 'yes']
+    # 운영 기본값: 디버거 및 리로더 비활성화
+    is_debug = os.environ.get('DEBUG', 'false').lower() in ['true', '1', 'yes']
     local_ip = get_local_ip()
     print("==================================================")
     print(" ⚡   Pulse (Pulse Cloud & Pulse OS) Server Started!")

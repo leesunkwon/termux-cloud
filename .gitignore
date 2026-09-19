@@ -35,3 +35,8 @@ uploads/*
 .vscode/
 .idea/
 *.swp
+
+# Local Pulse accounts, session signing key and runtime state
+.pulse/
+Secrets.xcconfig
+local.properties

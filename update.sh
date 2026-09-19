@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # ==============================================================================
 #  ☁️  iCloud Personal Server - 최신 코드 업데이트 스크립트 (update.sh)
@@ -20,8 +21,12 @@ echo -e "${CYAN}======================================================${NC}"
 # Git 업데이트
 if [ -d ".git" ]; then
     echo -e "${CYAN}[*] GitHub 저장소에서 최신 코드를 내려받습니다...${NC}"
+    if [ -n "$(git status --porcelain)" ]; then
+        echo "커밋하지 않은 변경이 있습니다. 먼저 정리한 뒤 업데이트하세요."
+        exit 1
+    fi
     git fetch origin main
-    git pull origin main
+    git pull --ff-only origin main
     chmod +x "$SCRIPT_DIR"/*.sh 2>/dev/null || true
 else
     echo -e "${YELLOW}[!] .git 폴더가 없습니다. 파일을 직접 복사한 환경입니다.${NC}"
@@ -29,7 +34,7 @@ fi
 
 # 의존성 업데이트 확인
 if command -v python3 &>/dev/null; then
-    pip install -q --upgrade flask werkzeug 2>/dev/null || true
+    python3 -m pip install -q -r requirements.txt
 fi
 
 # 기존 서버 중지

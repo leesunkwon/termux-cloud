@@ -5,7 +5,8 @@
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+cd "$SCRIPT_DIR" || exit 1
+source "$SCRIPT_DIR/process.sh"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -32,20 +33,11 @@ SERVER_PID=""
 
 if [ -f "$PID_FILE" ]; then
     SERVER_PID=$(cat "$PID_FILE")
-    if kill -0 "$SERVER_PID" 2>/dev/null; then
+    if kill -0 "$SERVER_PID" 2>/dev/null && pulse_pid_matches "$SERVER_PID"; then
         RUNNING=true
     fi
 fi
 
-if [ "$RUNNING" = false ]; then
-    # pid 파일이 없더라도 실제 프로세스 확인 (정확한 파일명 매칭으로 오탐 방지)
-    PID_CANDIDATE=$(pgrep -f "(python.*[ /]app\.py|node.*[ /]server\.js)" | head -n 1)
-    if [ -n "$PID_CANDIDATE" ]; then
-        SERVER_PID="$PID_CANDIDATE"
-        RUNNING=true
-        echo "$SERVER_PID" > "$PID_FILE"
-    fi
-fi
 
 echo -e "${CYAN}======================================================${NC}"
 echo -e "${CYAN}  ⚡   Pulse (Pulse Cloud & Pulse OS) Server 상태 점검  ${NC}"
