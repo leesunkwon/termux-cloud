@@ -355,6 +355,7 @@
     if (el.refreshBtn) {
       el.refreshBtn.addEventListener('click', () => {
         showToast('새로고침 중...');
+        checkServerUpdate(true);
         fetchFiles();
         fetchStorageStats();
         fetchDashboardData();
@@ -678,7 +679,7 @@
     }
 
     try {
-      const res = await fetch('/api/system/check-update');
+      const res = await fetch('/api/system/check-update' + (isManual ? '?force=1' : ''), { cache: 'no-store' });
       const data = await res.json();
       if (!data.success || data.fetchFailed || data.timeout) throw new Error('업데이트 확인 불가');
 

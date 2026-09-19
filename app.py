@@ -15,7 +15,7 @@ from pulse_metrics import Metrics
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
-APP_VERSION = 'v1.6.0'
+APP_VERSION = 'v1.6.1'
 INSTANCE_ID = uuid.uuid4().hex
 SERVER_START_TIME = datetime.now()
 METRICS = Metrics()
@@ -287,10 +287,14 @@ def add_no_cache_header(response):
 @app.route('/api/system/check-update', methods=['GET'])
 def check_update():
     with UPDATE_LOCK:
-        if UPDATE_CACHE['value'] is not None and time.monotonic() - UPDATE_CACHE['time'] < 300:
+        if request.args.get('force') != '1' and UPDATE_CACHE['value'] is not None and time.monotonic() - UPDATE_CACHE['time'] < 300:
             return jsonify(UPDATE_CACHE['value'])
         result = perform_update_check()
-        UPDATE_CACHE.update(time=time.monotonic(), value=result.get_json())
+        data = result.get_json()
+        if data.get('success') and not data.get('fetchFailed') and not data.get('timeout'):
+            UPDATE_CACHE.update(time=time.monotonic(), value=data)
+        else:
+            UPDATE_CACHE.update(time=0, value=None)
         return result
 
 def perform_update_check():
