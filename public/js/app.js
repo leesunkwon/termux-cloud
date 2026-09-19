@@ -8,6 +8,7 @@
 
   // State Management
   const state = {
+    dashboardPaused: false, dashboardInterval: 15000, dashboardFetchedAt: 0,
     folder: '', page: 1, pages: 1, total: 0, counts: {}, selected: new Set(),
     terminalBusy: false, editorDirty: false, editorBusy: false,
     currentAppView: 'portal', // 'portal' | 'cloud' | 'desktop' | 'dashboard'
@@ -52,8 +53,6 @@
     viewDesktop: document.getElementById('view-desktop'),
     viewDashboard: document.getElementById('view-dashboard'),
     navStatusChip: document.getElementById('nav-status-chip'),
-    serverUpdateBtn: document.getElementById('server-update-btn'),
-    updateBadgeDot: document.getElementById('update-badge-dot'),
     refreshBtn: document.getElementById('refresh-btn'),
 
     // Update Notification Banner
@@ -119,7 +118,6 @@
 
     // Dashboard Elements
     btnDashRefresh: document.getElementById('btn-dash-refresh'),
-    btnDashUpdate: document.getElementById('btn-dash-update'),
     dashOsBadge: document.getElementById('dash-os-badge'),
     dashVerBadge: document.getElementById('dash-ver-badge'),
     metricCpuVal: document.getElementById('metric-cpu-val'),
@@ -192,6 +190,11 @@
   // ================= Init =================
   async function init() {
     await Pulse.ready;
+    PulseDashboard.configure({
+      refresh: () => fetchDashboardData(),
+      pause: value => { state.dashboardPaused = value; },
+      interval: value => { state.dashboardInterval = value; }
+    });
     setupFileTools();
     Pulse.canLeave = canLeaveEditor;
     setupEventListeners();
@@ -216,20 +219,20 @@
     setTimeout(() => checkServerUpdate(false), 2000);
     setInterval(() => { if (!document.hidden) checkServerUpdate(false); }, 300000);
 
-    // Refresh only visible monitoring views; server shares cached samples.
+    // One shared poller: no timer-driven requests in hidden tabs or paused views.
     setInterval(() => {
-      if (document.hidden) return;
-      if (state.currentAppView === 'dashboard') {
-        fetchDashboardData(true);
-      } else if (state.currentAppView === 'desktop' && state.openWindows['monitor']) {
-        fetchDashboardData(true);
-      }
-    }, 15000);
+      if (document.hidden || state.dashboardPaused || Date.now() - state.dashboardFetchedAt < state.dashboardInterval) return;
+      const monitoring = state.currentAppView === 'dashboard' ||
+        (state.currentAppView === 'desktop' && state.openWindows.monitor &&
+         !document.getElementById('win-monitor').classList.contains('window-minimized') &&
+         (window.innerWidth > 768 || state.activeDesktopApp === 'monitor'));
+      if (monitoring) fetchDashboardData(true);
+    }, 1000);
 
     window.addEventListener('focus', () => {
       checkServerUpdate(false);
-      if (state.currentAppView === 'dashboard') fetchDashboardData(true);
-      if (state.currentAppView === 'desktop') {
+      if (!state.dashboardPaused && state.currentAppView === 'dashboard') fetchDashboardData(true);
+      if (!state.dashboardPaused && state.currentAppView === 'desktop') {
         fetchDashboardData(true);
         updateMonitorWidget();
       }
@@ -319,7 +322,7 @@
         fetchDashboardData();
       });
     }
-    if (el.btnDashUpdate || el.btnTriggerUpdate) {
+    if (el.btnTriggerUpdate) {
       const updateHandler = () => {
         if (state.hasUpdate) {
           applyServerUpdate();
@@ -327,7 +330,6 @@
           checkServerUpdate(true);
         }
       };
-      if (el.btnDashUpdate) el.btnDashUpdate.addEventListener('click', updateHandler);
       if (el.btnTriggerUpdate) el.btnTriggerUpdate.addEventListener('click', updateHandler);
     }
     if (el.btnOpenFullChangelog) {
@@ -356,19 +358,6 @@
         fetchFiles();
         fetchStorageStats();
         fetchDashboardData();
-        checkServerUpdate(false);
-      });
-    }
-
-    // Global Update Icon Button
-    if (el.serverUpdateBtn) {
-      el.serverUpdateBtn.addEventListener('click', () => {
-        if (state.hasUpdate) {
-          el.updateBanner.classList.remove('hidden');
-          state.bannerDismissed = false;
-        } else {
-          checkServerUpdate(true);
-        }
       });
     }
 
@@ -515,20 +504,34 @@
   }
 
   // ================= Dashboard Data Fetching & Rendering =================
-  async function fetchDashboardData(isSilent = false) {
-    try {
-      const res = await fetch('/api/system/dashboard');
-      const data = await res.json();
-      if (data.success) {
+  let dashboardRequest = null;
+  function fetchDashboardData(isSilent = false) {
+    if (dashboardRequest) return dashboardRequest;
+    state.dashboardFetchedAt = Date.now();
+    const started = performance.now();
+    dashboardRequest = (async () => {
+      try {
+        const data = await Pulse.api('/api/system/dashboard', { signal: AbortSignal.timeout(10000) });
         state.dashboardData = data;
         updateMenubarIndicators();
         updateMonitorWidget();
         renderDashboard(data);
         updatePortalSummaries();
-      }
-    } catch (err) {
-      if (!isSilent) console.warn('Failed to fetch dashboard data:', err);
-    }
+        PulseDashboard.render(data, performance.now() - started);
+        const chip = document.getElementById('nav-status-chip');
+        chip.querySelector('.nav-status-text').textContent = '연결됨';
+        chip.title = '최근 서버 응답 정상';
+        chip.dataset.connection = 'online';
+      } catch (error) {
+        PulseDashboard.failed(error.message);
+        const chip = document.getElementById('nav-status-chip');
+        chip.querySelector('.nav-status-text').textContent = '연결 확인 필요';
+        chip.title = '최근 조회 실패. 표시된 수치는 이전 조회 결과입니다.';
+        chip.dataset.connection = 'failed';
+        if (!isSilent) showToast('서버 상태 조회 실패: ' + error.message, () => fetchDashboardData());
+      } finally { dashboardRequest = null; }
+    })();
+    return dashboardRequest;
   }
 
   function renderDashboard(data) {
@@ -539,10 +542,11 @@
     if (el.portalVerVal) el.portalVerVal.textContent = data.version;
 
     // CPU
+    document.getElementById('metric-cpu-title').textContent = data.cpu.label || 'CPU 사용률';
     if (el.metricCpuVal) el.metricCpuVal.textContent = metricPercent(data.cpu);
-    if (el.metricCpuCores) el.metricCpuCores.textContent = `${data.cpu.cores}코어 (부하 ${data.cpu.load1})`;
+    if (el.metricCpuCores) el.metricCpuCores.textContent = `${data.cpu.cores}코어 · ${data.cpu.scope === 'process' ? '서버 프로세스' : '기기 전체'}`;
     if (el.metricCpuBar) el.metricCpuBar.style.width = `${Math.min(100, data.cpu.percent)}%`;
-    if (el.metricCpuLoad) el.metricCpuLoad.textContent = `1분 부하: ${data.cpu.load1 ?? '측정 불가'} / 5분: ${data.cpu.load5 ?? '측정 불가'}`;
+    if (el.metricCpuLoad) el.metricCpuLoad.textContent = data.cpu.reason || `실측 · ${data.cpu.sampleSeconds}초 샘플 · 1분 부하 ${data.cpu.load1 ?? '측정 불가'}`;
 
     // Memory
     if (el.metricMemVal) el.metricMemVal.textContent = metricPercent(data.memory);
@@ -576,7 +580,7 @@
     if (el.dashUptimeText) el.dashUptimeText.textContent = data.uptime.formatted;
     if (el.dashRuntimeText) el.dashRuntimeText.textContent = data.runtime;
     if (el.dashPidText) el.dashPidText.textContent = `${data.pid}`;
-    if (el.dashStoragePath) el.dashStoragePath.textContent = data.disk.cloudUsedFormatted ? `uploads (${data.disk.cloudFilesCount}개)` : 'uploads';
+    if (el.dashStoragePath) el.dashStoragePath.textContent = data.diagnostics?.storageDetails?.path || '확인 불가';
   }
 
   // ================= Changelog Fetching & Modal =================
@@ -682,7 +686,6 @@
         state.hasUpdate = true;
         state.updateInfo = data;
 
-        if (el.updateBadgeDot) el.updateBadgeDot.classList.remove('hidden');
 
         if (el.sidebarVersionBadge) {
           el.sidebarVersionBadge.className = 'version-badge has-update';
@@ -718,7 +721,6 @@
         state.hasUpdate = false;
         state.updateInfo = null;
 
-        if (el.updateBadgeDot) el.updateBadgeDot.classList.add('hidden');
         if (el.updateBanner) el.updateBanner.classList.add('hidden');
 
         if (el.sidebarVersionBadge) {
@@ -2300,7 +2302,7 @@
     if (cpuPct && d.cpu) {
       cpuPct.textContent = metricPercent(d.cpu);
       cpuBar.style.width = `${d.cpu.percent || 0}%`;
-      cpuDetail.textContent = `코어: ${d.cpu.cores}개 | 1분 부하: ${d.cpu.load1}`;
+      cpuDetail.textContent = `${d.cpu.label || 'CPU'} · ${d.cpu.cores}코어 | 1분 부하: ${d.cpu.load1 ?? '측정 불가'}`;
     }
 
     const memPct = document.getElementById('mon-mem-pct');

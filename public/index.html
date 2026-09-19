@@ -80,21 +80,13 @@
 
     <!-- 우측 상태 및 액션 -->
     <div class="navbar-right">
-      <div class="nav-status-chip" id="nav-status-chip" title="서버 정상 가동 중">
+      <div class="nav-status-chip" id="nav-status-chip" title="서버 응답 대기 중">
         <span class="pulse-dot"></span>
-        <span class="nav-status-text">정상 가동</span>
+        <span class="nav-status-text">연결 확인 중</span>
       </div>
 
-      <!-- 서버 최신 코드 업데이트 버튼 -->
-      <button class="icon-btn" id="server-update-btn" data-admin title="원격 업데이트 확인 및 동기화">
-        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-        </svg>
-        <span class="badge-dot hidden" id="update-badge-dot"></span>
-      </button>
-
       <!-- 새로고침 버튼 -->
-      <button class="icon-btn" id="refresh-btn" title="전체 새로고침">
+      <button class="icon-btn" id="refresh-btn" title="화면 데이터 새로고침" aria-label="화면 데이터 새로고침">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M23 4v6h-6"></path>
           <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
@@ -513,7 +505,7 @@
           <div class="dash-title-wrap">
             <h1 class="dash-title">Pulse 서버 종합 상태 대시보드</h1>
             <div class="dash-badges">
-              <span class="badge-status online"><span class="pulse-dot"></span> 24시간 가동 중</span>
+              <span class="badge-status" id="dash-connection">연결 확인 중</span>
               <span class="badge-pill" id="dash-os-badge">Pulse OS (Termux)</span>
               <span class="badge-pill" id="dash-ver-badge">버전 확인 중</span>
             </div>
@@ -524,13 +516,17 @@
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             <span>상태 새로고침</span>
           </button>
-          <button class="btn btn-dash-update" id="btn-dash-update" data-admin>
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-            <span>업데이트 확인</span>
-          </button>
+
         </div>
       </div>
 
+      <div class="diagnostic-toolbar">
+        <span id="dash-sampled-at" role="status">아직 수집된 지표가 없습니다.</span>
+        <label>자동 갱신 <select id="dash-poll-interval"><option value="5000">5초</option><option value="15000" selected>15초</option><option value="30000">30초</option><option value="60000">60초</option></select></label>
+        <button class="btn btn-outline" id="dash-pause" aria-pressed="false">일시 정지</button>
+        <button class="btn btn-outline" id="dash-export" disabled>진단 JSON 저장</button>
+      </div>
+      <div id="dash-alerts" class="diagnostic-alerts" aria-live="polite"></div>
       <!-- 실시간 자원 4대 모니터링 카드 그리드 -->
       <div class="dash-metrics-grid">
         <!-- 1) CPU 사용률 -->
@@ -550,11 +546,11 @@
                 <line x1="1" y1="14" x2="4" y2="14"></line>
               </svg>
             </div>
-            <span class="metric-title">CPU 부하율</span>
+            <span class="metric-title" id="metric-cpu-title">CPU 사용률</span>
           </div>
           <div class="metric-value-row">
-            <span class="metric-main-val" id="metric-cpu-val">0%</span>
-            <span class="metric-sub-val" id="metric-cpu-cores">4코어</span>
+            <span class="metric-main-val" id="metric-cpu-val">측정 중</span>
+            <span class="metric-sub-val" id="metric-cpu-cores">코어 확인 중</span>
           </div>
           <div class="progress-bar-bg">
             <div class="progress-bar-fill fill-blue" id="metric-cpu-bar" style="width: 0%"></div>
@@ -598,12 +594,12 @@
           </div>
           <div class="metric-value-row">
             <span class="metric-main-val" id="metric-battery-val">측정 중</span>
-            <span class="metric-sub-val" id="metric-battery-status">충전 중</span>
+            <span class="metric-sub-val" id="metric-battery-status">확인 중</span>
           </div>
           <div class="progress-bar-bg">
             <div class="progress-bar-fill fill-green" id="metric-battery-bar" style="width: 0%"></div>
           </div>
-          <div class="metric-footer-text" id="metric-battery-detail">24시간 안정 구동 전원</div>
+          <div class="metric-footer-text" id="metric-battery-detail">배터리 정보 확인 중</div>
         </div>
 
         <!-- 4) 저장 공간 (Disk) -->
@@ -627,6 +623,12 @@
         </div>
       </div>
 
+      <section class="dash-card diagnostic-history" aria-labelledby="history-title">
+        <h3 id="history-title">관측 추이</h3>
+        <p>조회 중 수집한 최근 60개 샘플 · 최소 10초 간격 · 서버 재시작 시 초기화</p>
+        <div id="dash-history"></div>
+      </section>
+      <div id="dash-diagnostics" class="diagnostic-grid"></div>
       <!-- 대시보드 하단 2열 상세 정보 -->
       <div class="dash-details-row">
         <!-- 좌측: 서버 네트워크 및 가동 환경 -->
@@ -1345,6 +1347,7 @@
   <div class="toast-container" id="toast-container"></div>
 
   <script src="js/pulse.js"></script>
+  <script src="js/dashboard.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

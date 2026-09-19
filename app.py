@@ -10,13 +10,34 @@ import time
 import signal
 import uuid
 from datetime import datetime
-from flask import Flask, request, jsonify, send_from_directory, send_file, abort
+from flask import Flask, request, jsonify, send_from_directory, send_file, abort, g
+from pulse_metrics import Metrics
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
-APP_VERSION = 'v1.5.2'
+APP_VERSION = 'v1.6.0'
 INSTANCE_ID = uuid.uuid4().hex
 SERVER_START_TIME = datetime.now()
+METRICS = Metrics()
+
+@app.before_request
+def begin_measurement():
+    g.pulse_started = time.monotonic()
+    METRICS.begin_request()
+
+@app.after_request
+def finish_measurement(response):
+    started = g.pop('pulse_started', None)
+    if started is not None:
+        METRICS.finish_request((time.monotonic() - started) * 1000, response.status_code)
+    return response
+
+@app.teardown_request
+def finish_failed_measurement(error):
+    started = g.pop('pulse_started', None)
+    if started is not None:
+        METRICS.finish_request((time.monotonic() - started) * 1000, 500)
+
 
 # 저장 경로 설정 (환경변수로 변경 가능: 예: STORAGE_PATH=/sdcard/MyCloud)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -410,37 +431,6 @@ def get_system_memory():
             'freeFormatted': '측정 불가', 'totalBytes': None, 'usedBytes': None,
             'percent': None, 'measurement': 'unavailable'}
 
-CPU_SAMPLE = None
-CPU_LOCK = threading.Lock()
-
-def get_cpu_info():
-    global CPU_SAMPLE
-    cores = os.cpu_count() or 1
-    try:
-        load = os.getloadavg()
-    except (AttributeError, OSError):
-        load = (None, None, None)
-    percent = None
-    measurement = 'unavailable'
-    try:
-        with CPU_LOCK:
-            with open('/proc/stat') as source:
-                values = [int(value) for value in source.readline().split()[1:9]]
-            total, idle = sum(values), values[3] + values[4]
-            if CPU_SAMPLE and total > CPU_SAMPLE[0]:
-                percent = round(100 * (1 - (idle - CPU_SAMPLE[1]) / (total - CPU_SAMPLE[0])), 1)
-                percent = min(100, max(0, percent))
-                measurement = 'measured'
-            else:
-                measurement = 'sampling'
-            CPU_SAMPLE = (total, idle)
-    except (OSError, ValueError, IndexError):
-        if load[0] is not None:
-            percent = round(min(100, load[0] / cores * 100), 1)
-            measurement = 'estimated'
-    return dict(cores=cores, percent=percent, measurement=measurement,
-                load1=load[0], load5=load[1], load15=load[2])
-
 def get_battery_info():
     try:
         res = subprocess.run(['termux-battery-status'], capture_output=True, text=True, timeout=2)
@@ -455,7 +445,7 @@ def get_battery_info():
                 'plugged': bdata.get('plugged', '확인 불가'),
                 'status': bdata.get('status', '확인 불가'),
                 'temperature': round(bdata['temperature'], 1) if isinstance(bdata.get('temperature'), (int, float)) else None,
-                'health': bdata.get('health', 'GOOD')
+                'health': bdata.get('health', '확인 불가')
             }
     except Exception:
         pass
@@ -501,8 +491,9 @@ def get_dashboard_data():
         total, used, free = shutil.disk_usage(STORAGE_DIR)
         disk_pct = round((used / total) * 100, 1) if total > 0 else 0
 
-        used_cloud, file_counts, _ = file_statistics()
+        used_cloud, file_counts, type_sizes = file_statistics()
 
+        diagnostics = METRICS.collect(STORAGE_DIR, BASE_DIR)
         is_termux = os.path.exists('/data/data/com.termux') or 'com.termux' in os.environ.get('PREFIX', '')
 
         return jsonify({
@@ -512,7 +503,19 @@ def get_dashboard_data():
             'osName': f"{'Android (Termux)' if is_termux else platform.system()} {platform.machine()}",
             'pid': os.getpid(),
             'uptime': get_uptime_info(),
-            'cpu': get_cpu_info(),
+            'cpu': diagnostics['cpu'],
+            'diagnostics': diagnostics,
+            'services': {
+                'terminalBusy': TERMINAL_LOCK.locked(),
+                'fileOperationBusy': app.extensions['pulse_file_lock'].locked(),
+                'updateBusy': UPDATE_LOCK.locked(),
+                'managedRestart': os.environ.get('PULSE_MANAGED') == '1',
+                'secureCookie': app.config['SESSION_COOKIE_SECURE'],
+                'debug': app.debug,
+                'vncPort': os.environ.get('VNC_PORT', '6080'),
+                'updateCheckedSecondsAgo': round(time.monotonic() - UPDATE_CACHE['time']) if UPDATE_CACHE['value'] is not None else None,
+                'authentication': True
+            },
             'memory': get_system_memory(),
             'battery': get_battery_info(),
             'disk': {
@@ -521,7 +524,9 @@ def get_dashboard_data():
                 'freeFormatted': format_size(free),
                 'percent': disk_pct,
                 'cloudUsedFormatted': format_size(used_cloud),
-                'cloudFilesCount': file_counts['total']
+                'cloudFilesCount': file_counts['total'],
+                'fileCounts': file_counts,
+                'typeSizes': type_sizes
             },
             'network': {
                 'localIp': get_local_ip(),
