@@ -31,7 +31,7 @@ def configure_auth(app):
                       PERMANENT_SESSION_LIFETIME=timedelta(hours=12))
     attempts = {}
     lock = threading.Lock()
-    public = {'/api/auth/status', '/api/auth/login'}
+    public = {'/api/auth/status', '/api/auth/login', '/api/system/health'}
 
     @app.before_request
     def protect_api():

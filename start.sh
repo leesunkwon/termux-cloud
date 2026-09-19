@@ -86,6 +86,10 @@ fi
 if [ -f "$PID_FILE" ]; then
     OLD_PID=$(cat "$PID_FILE")
     if [[ "$OLD_PID" =~ ^[0-9]+$ ]] && kill -0 "$OLD_PID" 2>/dev/null; then
+        if pulse_pid_matches "$OLD_PID"; then
+            echo "이미 Pulse 서버가 실행 중입니다 (PID: $OLD_PID). ./stop.sh로 종료하세요."
+            exit 0
+        fi
         echo "기록된 PID의 프로젝트 소속을 확인하지 못했습니다. PID 파일을 보존하고 시작을 중단합니다."
         exit 1
     fi

@@ -9,6 +9,8 @@ import threading
 import time
 import signal
 import uuid
+import shlex
+from pathlib import Path
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory, send_file, abort, g
 from pulse_metrics import Metrics
@@ -369,7 +371,7 @@ def acquire_restart_guards():
     return held
 
 
-def schedule_restart(guards):
+def schedule_restart(guards=None):
     global RESTART_ERROR
     RESTART_ERROR = None
     RESTART_PENDING.set()
@@ -377,15 +379,38 @@ def schedule_restart(guards):
     def restart():
         global RESTART_ERROR
         try:
-            # Give the update response time to reach the browser; no second POST required.
-            time.sleep(2)
-            os.execv(sys.executable, [sys.executable, os.path.join(BASE_DIR, 'app.py')])
+            # 브라우저에 응답(JSON)이 완전히 전달될 시간을 확보합니다.
+            time.sleep(1.5)
+            stop_script = os.path.join(BASE_DIR, 'stop.sh')
+            start_script = os.path.join(BASE_DIR, 'start.sh')
+
+            # 현재 프로세스와 완전히 분리된 세션에서 stop.sh 실행 후 start.sh --bg 실행
+            restart_cmd = (
+                f"sleep 0.5 && "
+                f"bash {shlex.quote(stop_script)} && "
+                f"bash {shlex.quote(start_script)} --bg"
+            )
+            subprocess.Popen(
+                ['bash', '-c', restart_cmd],
+                cwd=BASE_DIR,
+                start_new_session=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True
+            )
+            time.sleep(0.5)
+            # 이전 프로세스를 즉시 종료하여 3000번 포트 리스닝 소켓을 OS에 즉시 반환
+            os._exit(0)
         except Exception:
             app.logger.exception('Pulse restart failed')
             RESTART_ERROR = '서버 재시작 실패. Termux에서 termux-cloud logs를 확인하고 termux-cloud restart를 실행하세요.'
-        finally:
-            for lock in guards:
-                lock.release()
+            if guards:
+                for lock in guards:
+                    try:
+                        lock.release()
+                    except Exception:
+                        pass
             RESTART_PENDING.clear()
 
     try:
@@ -408,12 +433,10 @@ def system_update():
     try:
         if RESTART_PENDING.is_set():
             return jsonify(success=False, error='서버 재시작이 이미 진행 중입니다.'), 409
-        if os.environ.get('PULSE_MANAGED') != '1':
-            return restart_unavailable()
         guards = acquire_restart_guards()
         if guards is None:
             return jsonify(success=False, error='명령 실행 또는 파일 작업이 끝난 뒤 다시 시도하세요.'), 409
-        dirty = subprocess.check_output(['git', 'status', '--porcelain'], cwd=BASE_DIR, text=True)
+        dirty = subprocess.check_output(['git', 'status', '--porcelain', '-uno'], cwd=BASE_DIR, text=True)
         if dirty.strip():
             return jsonify(success=False, error='커밋하지 않은 변경이 있습니다. 서버에서 먼저 정리하세요.'), 409
         result = subprocess.run(['git', 'pull', '--ff-only', 'origin', 'main'], cwd=BASE_DIR,
@@ -421,6 +444,21 @@ def system_update():
         UPDATE_CACHE['time'] = 0
         if result.returncode != 0:
             return jsonify(success=False, output=(result.stdout + result.stderr).strip(), stage='failed'), 500
+
+        # 스크립트 실행 권한 복구
+        try:
+            for sh_file in Path(BASE_DIR).glob('*.sh'):
+                sh_file.chmod(sh_file.stat().st_mode | 0o755)
+        except Exception:
+            pass
+
+        # 의존성 변경 사항 확인
+        try:
+            subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '-r', 'requirements.txt'],
+                           cwd=BASE_DIR, timeout=60)
+        except Exception:
+            pass
+
         schedule_restart(guards)
         guards = None  # Ownership transferred to the restart worker.
         return jsonify(success=True, output=(result.stdout + result.stderr).strip(),
@@ -444,8 +482,6 @@ def restart_server():
         # Older browser code may still send this after the update response.
         if RESTART_PENDING.is_set():
             return jsonify(success=True, stage='restarting', instanceId=INSTANCE_ID)
-        if os.environ.get('PULSE_MANAGED') != '1':
-            return restart_unavailable()
         guards = acquire_restart_guards()
         if guards is None:
             return jsonify(success=False, error='명령 실행 또는 파일 작업이 끝난 뒤 다시 시도하세요.'), 409
@@ -681,6 +717,16 @@ if __name__ == '__main__':
     # 운영 기본값: 디버거 및 리로더 비활성화
     is_debug = os.environ.get('DEBUG', 'false').lower() in ['true', '1', 'yes']
     local_ip = get_local_ip()
+    os.environ['PULSE_MANAGED'] = '1'
+
+    # PID 파일 기록 (수동 구동 시에도 안정적인 관리 지원)
+    pid_file = os.path.join(BASE_DIR, '.server.pid')
+    try:
+        with open(pid_file, 'w') as f:
+            f.write(str(os.getpid()))
+    except Exception:
+        pass
+
     print("==================================================")
     print(" ⚡   Pulse (Pulse Cloud & Pulse OS) Server Started!")
     print(f" 📂  저장소 경로: {STORAGE_DIR}")

@@ -47,4 +47,9 @@ sleep 1
 
 # 새 서버 재시작
 echo -e "\n${GREEN}[✓] 업데이트 완료! 최신 버전으로 서버를 다시 시작합니다...${NC}"
-./start.sh "$@"
+if [ "$#" -eq 0 ]; then
+    ./start.sh --bg
+else
+    ./start.sh "$@"
+fi
+

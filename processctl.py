@@ -54,7 +54,19 @@ def cwd_for(pid):
     return None
 
 
-def matches(pid, argv):
+def recorded_pid():
+    pid_file = ROOT / '.server.pid'
+    if pid_file.exists():
+        try:
+            content = pid_file.read_text().strip()
+            if content.isdigit():
+                return int(content)
+        except OSError:
+            pass
+    return None
+
+
+def matches(pid, argv, expected_pid=None):
     if pid in (os.getpid(), os.getppid()) or len(argv) < 2:
         return False
     runtime = Path(argv[0]).name.lower()
@@ -74,7 +86,14 @@ def matches(pid, argv):
         return Path(script).resolve() == ROOT / target
     if script not in (target, './' + target):
         return False
-    return cwd_for(pid) == ROOT
+    cwd = cwd_for(pid)
+    if cwd is not None:
+        return cwd == ROOT
+    # In environments where cwd is inaccessible (e.g. non-rooted Android Termux without lsof),
+    # verify against recorded PID if available.
+    if expected_pid is None:
+        expected_pid = recorded_pid()
+    return expected_pid is not None and pid == expected_pid
 
 
 def server_pids():
@@ -96,18 +115,29 @@ def still_alive(pid):
 def stop():
     pids = server_pids()
     pid_file = ROOT / '.server.pid'
+    rec_pid = recorded_pid()
+    if not pids and rec_pid is not None:
+        if still_alive(rec_pid):
+            current = snapshot()
+            if matches(rec_pid, current.get(rec_pid, []), expected_pid=rec_pid):
+                pids = [rec_pid]
+            else:
+                raise RuntimeError('기록된 PID의 프로젝트 소속을 확인하지 못했습니다. PID 파일을 보존합니다.')
+        else:
+            pid_file.unlink(missing_ok=True)
+            print('실행 중인 Pulse 서버가 없습니다.')
+            return
+
     if not pids:
-        recorded = pid_file.read_text().strip() if pid_file.exists() else ''
-        if recorded.isdigit() and still_alive(int(recorded)):
-            raise RuntimeError('기록된 PID의 프로젝트 소속을 확인하지 못했습니다. PID 파일을 보존합니다.')
         pid_file.unlink(missing_ok=True)
         print('실행 중인 Pulse 서버가 없습니다.')
         return
+
     # Capture reload children before signaling the parent; revalidate each PID before signaling.
     for sig, wait_seconds in ((signal.SIGTERM, 3), (signal.SIGKILL, 2)):
         current = snapshot()
         for pid in pids:
-            if matches(pid, current.get(pid, [])):
+            if matches(pid, current.get(pid, []), expected_pid=pid):
                 try:
                     os.kill(pid, sig)
                 except ProcessLookupError:
@@ -130,7 +160,7 @@ if __name__ == '__main__':
                 print(pid)
         elif action == 'match':
             pid = int(sys.argv[2])
-            sys.exit(0 if matches(pid, snapshot().get(pid, [])) else 1)
+            sys.exit(0 if matches(pid, snapshot().get(pid, []), expected_pid=pid) else 1)
         elif action == 'stop':
             stop()
         else:
