@@ -15,7 +15,7 @@ from pulse_metrics import Metrics
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
-APP_VERSION = 'v1.6.2'
+APP_VERSION = 'v1.6.3'
 INSTANCE_ID = uuid.uuid4().hex
 SERVER_START_TIME = datetime.now()
 METRICS = Metrics()
@@ -353,41 +353,116 @@ def perform_update_check():
     except Exception as e:
         return jsonify({'success': False, 'hasUpdate': False, 'error': str(e)})
 
-# 웹 UI에서 직접 최신 코드로 업데이트하는 API (Git 기반)
+# Keep the mutation locks until exec so uploads/commands cannot start mid-restart.
+RESTART_PENDING = threading.Event()
+RESTART_ERROR = None
+
+
+def acquire_restart_guards():
+    held = []
+    for lock in (TERMINAL_LOCK, app.extensions['pulse_file_lock']):
+        if not lock.acquire(blocking=False):
+            for acquired in held:
+                acquired.release()
+            return None
+        held.append(lock)
+    return held
+
+
+def schedule_restart(guards):
+    global RESTART_ERROR
+    RESTART_ERROR = None
+    RESTART_PENDING.set()
+
+    def restart():
+        global RESTART_ERROR
+        try:
+            # Give the update response time to reach the browser; no second POST required.
+            time.sleep(2)
+            os.execv(sys.executable, [sys.executable, os.path.join(BASE_DIR, 'app.py')])
+        except Exception:
+            app.logger.exception('Pulse restart failed')
+            RESTART_ERROR = '서버 재시작 실패. Termux에서 termux-cloud logs를 확인하고 termux-cloud restart를 실행하세요.'
+        finally:
+            for lock in guards:
+                lock.release()
+            RESTART_PENDING.clear()
+
+    try:
+        threading.Thread(target=restart, daemon=True).start()
+    except Exception:
+        RESTART_PENDING.clear()
+        raise
+
+
+def restart_unavailable():
+    return jsonify(success=False, error='현재 서버가 관리 모드로 실행되지 않았습니다. 스마트폰 Termux에서 termux-cloud restart를 한 번 실행한 뒤 웹 업데이트를 다시 시도하세요.'), 409
+
+
+# Download and schedule restart as one server operation.
 @app.route('/api/system/update', methods=['POST'])
 def system_update():
     if not UPDATE_LOCK.acquire(blocking=False):
         return jsonify(success=False, error='업데이트 확인 또는 적용이 진행 중입니다.'), 409
+    guards = None
     try:
+        if RESTART_PENDING.is_set():
+            return jsonify(success=False, error='서버 재시작이 이미 진행 중입니다.'), 409
+        if os.environ.get('PULSE_MANAGED') != '1':
+            return restart_unavailable()
+        guards = acquire_restart_guards()
+        if guards is None:
+            return jsonify(success=False, error='명령 실행 또는 파일 작업이 끝난 뒤 다시 시도하세요.'), 409
         dirty = subprocess.check_output(['git', 'status', '--porcelain'], cwd=BASE_DIR, text=True)
         if dirty.strip():
             return jsonify(success=False, error='커밋하지 않은 변경이 있습니다. 서버에서 먼저 정리하세요.'), 409
         result = subprocess.run(['git', 'pull', '--ff-only', 'origin', 'main'], cwd=BASE_DIR,
                                 capture_output=True, text=True, timeout=60)
         UPDATE_CACHE['time'] = 0
-        return jsonify(success=result.returncode == 0, output=(result.stdout + result.stderr).strip(),
-                       stage='downloaded' if result.returncode == 0 else 'failed',
-                       restartSupported=os.environ.get('PULSE_MANAGED') == '1', instanceId=INSTANCE_ID)
+        if result.returncode != 0:
+            return jsonify(success=False, output=(result.stdout + result.stderr).strip(), stage='failed'), 500
+        schedule_restart(guards)
+        guards = None  # Ownership transferred to the restart worker.
+        return jsonify(success=True, output=(result.stdout + result.stderr).strip(),
+                       stage='restarting', restartScheduled=True,
+                       restartSupported=True, instanceId=INSTANCE_ID)
     except Exception as error:
         return jsonify(success=False, error=str(error)), 500
     finally:
+        if guards is not None:
+            for lock in guards:
+                lock.release()
         UPDATE_LOCK.release()
+
 
 @app.post('/api/system/restart')
 def restart_server():
-    if TERMINAL_LOCK.locked() or app.extensions['pulse_file_lock'].locked():
-        return jsonify(success=False, error='명령 실행 또는 파일 작업이 끝난 뒤 다시 시도하세요.'), 409
-    if os.environ.get('PULSE_MANAGED') != '1':
-        return jsonify(success=False, error='Termux에서 ./stop.sh 후 ./start.sh --bg로 재시작하세요.'), 409
-    def restart():
-        time.sleep(1)
-        os.execv(sys.executable, [sys.executable, os.path.join(BASE_DIR, 'app.py')])
-    threading.Thread(target=restart, daemon=True).start()
-    return jsonify(success=True, stage='restarting', instanceId=INSTANCE_ID)
+    if not UPDATE_LOCK.acquire(blocking=False):
+        return jsonify(success=False, error='업데이트 확인 또는 적용이 진행 중입니다.'), 409
+    guards = None
+    try:
+        # Older browser code may still send this after the update response.
+        if RESTART_PENDING.is_set():
+            return jsonify(success=True, stage='restarting', instanceId=INSTANCE_ID)
+        if os.environ.get('PULSE_MANAGED') != '1':
+            return restart_unavailable()
+        guards = acquire_restart_guards()
+        if guards is None:
+            return jsonify(success=False, error='명령 실행 또는 파일 작업이 끝난 뒤 다시 시도하세요.'), 409
+        schedule_restart(guards)
+        guards = None
+        return jsonify(success=True, stage='restarting', instanceId=INSTANCE_ID)
+    finally:
+        if guards is not None:
+            for lock in guards:
+                lock.release()
+        UPDATE_LOCK.release()
+
 
 @app.get('/api/system/health')
 def health():
-    return jsonify(success=True, version=APP_VERSION, instanceId=INSTANCE_ID)
+    return jsonify(success=True, version=APP_VERSION, instanceId=INSTANCE_ID,
+                   restartPending=RESTART_PENDING.is_set(), restartError=RESTART_ERROR)
 
 def get_local_ip():
     import socket

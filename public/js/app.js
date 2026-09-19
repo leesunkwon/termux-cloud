@@ -771,22 +771,24 @@
       label('1/3 · 최신 코드 다운로드 중');
       const data = await Pulse.post('/api/system/update');
       if (!data.restartSupported) {
-        await Pulse.ask('다운로드 완료. Termux에서 ./stop.sh 후 ./start.sh --bg로 재시작하세요. 이후 새로고침하면 적용됩니다.', { cancel: false });
+        await Pulse.ask('다운로드 완료. 스마트폰 Termux에서 termux-cloud restart를 실행하세요. 이후 새로고침하면 적용됩니다.', { cancel: false });
         return;
       }
       label('2/3 · 서버 재시작 중');
-      await Pulse.post('/api/system/restart');
+      if (!data.restartScheduled) await Pulse.post('/api/system/restart');
       label('3/3 · 서버 재접속 확인 중');
       for (let count = 0; count < 30; count++) {
         await new Promise(resolve => setTimeout(resolve, 2000));
+        let health;
         try {
-          const health = await Pulse.api('/api/system/health', { signal: AbortSignal.timeout(3000) });
+          health = await Pulse.api('/api/system/health', { signal: AbortSignal.timeout(3000) });
           if (health.instanceId !== data.instanceId) {
             state.editorDirty = false;
             location.reload();
             return;
           }
         } catch (_) { /* The process is restarting. */ }
+        if (health?.restartError) throw new Error(health.restartError);
       }
       throw new Error('재접속을 확인하지 못했습니다. Termux에서 ./status.sh로 상태를 확인한 뒤 새로고침하세요.');
     } catch (error) {
