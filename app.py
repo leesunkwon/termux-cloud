@@ -464,12 +464,13 @@ def system_update():
 
         # 레거시 기본 샘플 파일 정리
         for legacy_file in ['sample_photo.svg', '환영합니다.txt']:
-            legacy_path = os.path.join(UPLOAD_FOLDER, legacy_file)
-            if os.path.exists(legacy_path):
-                try:
-                    os.remove(legacy_path)
-                except Exception:
-                    pass
+            for s_dir in {STORAGE_DIR, DEFAULT_STORAGE_DIR}:
+                legacy_path = os.path.join(s_dir, legacy_file)
+                if os.path.exists(legacy_path):
+                    try:
+                        os.remove(legacy_path)
+                    except Exception:
+                        pass
 
         # 의존성 변경 사항 확인
         try:
