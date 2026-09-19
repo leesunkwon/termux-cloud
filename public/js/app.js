@@ -509,6 +509,7 @@
       const data = await res.json();
       if (data.success) {
         state.dashboardData = data;
+        updateMenubarIndicators();
         renderDashboard(data);
         updatePortalSummaries();
       }
@@ -1420,6 +1421,18 @@
       if (batPct && state.dashboardData.battery && state.dashboardData.battery.percentage !== null) {
         batPct.textContent = `${state.dashboardData.battery.percentage}%`;
       }
+      const data = state.dashboardData;
+      const labels = {
+        'settings-os-version': data.version ? `Pulse OS ${data.version}` : 'Pulse OS · 버전 정보 없음',
+        'about-os-version': data.version ? `버전 ${data.version.replace(/^v/, '')}` : '버전 정보 없음',
+        'settings-device-name': data.osName || '기기 정보 없음',
+        'about-device-name': data.osName || '기기 정보 없음',
+        'about-cpu-name': data.cpu && data.cpu.cores ? `${data.cpu.cores}코어` : '정보 없음'
+      };
+      Object.entries(labels).forEach(([id, value]) => {
+        const target = document.getElementById(id);
+        if (target) target.textContent = value;
+      });
       const aboutMem = document.getElementById('about-mem-name');
       if (aboutMem && state.dashboardData.memory) {
         aboutMem.textContent = state.dashboardData.memory.totalFormatted;
@@ -1610,13 +1623,13 @@
     state.activeDesktopApp = appId;
 
     const names = {
-      terminal: '터미널',
-      finder: 'Pulse Cloud Finder',
-      editor: '코드 에디터',
-      monitor: '활동 모니터',
-      browser: '웹 브라우저',
-      linux: '리눅스 GUI',
-      settings: '환경설정',
+      terminal: 'Pulse 터미널',
+      finder: 'Pulse 파일',
+      editor: 'Pulse 에디터',
+      monitor: 'Pulse 모니터',
+      browser: 'Pulse 브라우저',
+      linux: 'Linux 데스크톱',
+      settings: 'Pulse OS 설정',
       about: 'Pulse OS 정보'
     };
     const titleEl = document.getElementById('desktop-active-app-name');
@@ -1795,8 +1808,8 @@
       if (cmd === 'help') {
         const helpLine = document.createElement('div');
         helpLine.className = 'term-line term-info';
-        helpLine.textContent = `[Termux 가상 터미널 도움말]
-- 스마트폰 Termux의 실제 쉘 명령을 수행합니다 (예: ls, pwd, df -h, python3, git 등).
+        helpLine.textContent = `[Pulse 터미널 도움말]
+- Pulse 서버가 실행 중인 기기의 쉘 명령을 수행합니다 (예: ls, pwd, df -h, python3, git 등).
 - 'cd <dir>'로 작업 디렉토리를 자유롭게 이동할 수 있습니다.
 - 상단의 자주 쓰는 명령어 버튼을 누르면 즉시 실행됩니다.`;
         output.appendChild(helpLine);
@@ -1818,7 +1831,7 @@
         if (data.cwd) {
           state.terminalCwd = data.cwd;
           const shortCwd = data.cwd.split('/').slice(-2).join('/') || data.cwd;
-          promptEl.textContent = `termux:${shortCwd}$`;
+          promptEl.textContent = `pulse:${shortCwd}$`;
         }
         const outLine = document.createElement('div');
         outLine.className = `term-line ${data.exitCode === 0 ? 'term-success' : 'term-err'}`;
@@ -2000,7 +2013,7 @@
             saveStatus.classList.add('green');
           }
           const winTitle = document.getElementById('editor-win-title');
-          if (winTitle) winTitle.textContent = `코드 에디터 — ${filename}`;
+          if (winTitle) winTitle.textContent = `Pulse 에디터 — ${filename}`;
           showToast(`'${filename}' 파일이 정상 저장되었습니다.`);
           fetchFiles().then(() => renderFinderFiles());
         } else {
@@ -2020,7 +2033,7 @@
     const saveStatus = document.getElementById('editor-save-status');
 
     if (filenameInput) filenameInput.value = filename;
-    if (winTitle) winTitle.textContent = `코드 에디터 — ${filename}`;
+    if (winTitle) winTitle.textContent = `Pulse 에디터 — ${filename}`;
     if (saveStatus) {
       saveStatus.textContent = '불러오는 중...';
       saveStatus.classList.remove('green');
