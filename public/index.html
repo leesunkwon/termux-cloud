@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>iCloud - 내 갤럭시 개인 서버</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230071e3'><path d='M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z'/></svg>">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700&family=Pretendard:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- 전체 드롭존 오버레이 -->
+  <div id="drop-overlay" class="drop-overlay hidden">
+    <div class="drop-modal">
+      <div class="drop-icon">
+        <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+      </div>
+      <h2>iCloud로 파일 업로드</h2>
+      <p>여기에 사진이나 파일을 놓으면 즉시 업로드됩니다</p>
+    </div>
+  </div>
+
+  <div class="app-container">
+    <!-- 사이드바 -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <svg class="icloud-logo" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+          </svg>
+          <div class="logo-text">
+            <span class="logo-title">iCloud</span>
+            <span class="logo-sub">Galaxy Server</span>
+          </div>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <div class="nav-group-label">라이브러리</div>
+        <button class="nav-item active" data-filter="all">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          </span>
+          <span class="nav-label">모든 파일</span>
+          <span class="nav-count" id="count-all">0</span>
+        </button>
+
+        <button class="nav-item" data-filter="image">
+          <span class="nav-icon photos-color">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+          </span>
+          <span class="nav-label">사진</span>
+          <span class="nav-count" id="count-image">0</span>
+        </button>
+
+        <button class="nav-item" data-filter="video">
+          <span class="nav-icon video-color">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+          </span>
+          <span class="nav-label">비디오</span>
+          <span class="nav-count" id="count-video">0</span>
+        </button>
+
+        <button class="nav-item" data-filter="document">
+          <span class="nav-icon docs-color">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          </span>
+          <span class="nav-label">문서</span>
+          <span class="nav-count" id="count-document">0</span>
+        </button>
+
+        <button class="nav-item" data-filter="audio">
+          <span class="nav-icon audio-color">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+          </span>
+          <span class="nav-label">오디오</span>
+          <span class="nav-count" id="count-audio">0</span>
+        </button>
+
+        <button class="nav-item" data-filter="archive">
+          <span class="nav-icon archive-color">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+          </span>
+          <span class="nav-label">압축파일 / 기타</span>
+          <span class="nav-count" id="count-other">0</span>
+        </button>
+      </nav>
+
+      <!-- 저장공간 위젯 -->
+      <div class="sidebar-storage">
+        <div class="storage-title">
+          <span>갤럭시 저장 공간</span>
+          <span class="storage-badge"><span class="pulse-dot"></span> Termux 구동중</span>
+        </div>
+        <div class="storage-bar">
+          <div class="storage-segment seg-photos" id="seg-photos" style="width: 0%"></div>
+          <div class="storage-segment seg-videos" id="seg-videos" style="width: 0%"></div>
+          <div class="storage-segment seg-docs" id="seg-docs" style="width: 0%"></div>
+          <div class="storage-segment seg-others" id="seg-others" style="width: 0%"></div>
+        </div>
+        <div class="storage-legend">
+          <div class="legend-item"><span class="dot dot-blue"></span>사진</div>
+          <div class="legend-item"><span class="dot dot-orange"></span>비디오</div>
+          <div class="legend-item"><span class="dot dot-yellow"></span>문서</div>
+          <div class="legend-item"><span class="dot dot-green"></span>기타</div>
+        </div>
+        <div class="storage-text" id="storage-text">
+          계산 중...
+        </div>
+      </div>
+    </aside>
+
+    <!-- 메인 컨텐츠 영역 -->
+    <main class="main-content">
+      <!-- 상단 내비게이션 바 -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="icon-btn mobile-menu-btn" id="mobile-menu-btn" aria-label="메뉴 토글">
+            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+          </button>
+          <div class="page-title-wrap">
+            <h1 class="page-title" id="current-view-title">모든 파일</h1>
+            <span class="file-summary" id="file-summary">0개 항목</span>
+          </div>
+        </div>
+
+        <div class="topbar-center">
+          <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="search-input" placeholder="파일 검색..." autocomplete="off">
+            <button class="clear-search-btn hidden" id="clear-search-btn" aria-label="검색 취소">✕</button>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <!-- 정렬 드롭다운 -->
+          <div class="sort-wrapper">
+            <select id="sort-select" class="sort-select" aria-label="정렬 방식">
+              <option value="modified-desc">최신 추가순</option>
+              <option value="modified-asc">오래된순</option>
+              <option value="name-asc">이름순 (가-하)</option>
+              <option value="name-desc">이름순 (하-가)</option>
+              <option value="size-desc">용량 큰 순</option>
+              <option value="size-asc">용량 작은 순</option>
+            </select>
+          </div>
+
+          <!-- 보기 모드 전환 (그리드 / 리스트) -->
+          <div class="view-toggle-group">
+            <button class="toggle-btn active" id="btn-grid-view" title="격자형 보기">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+                <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+                <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+                <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+              </svg>
+            </button>
+            <button class="toggle-btn" id="btn-list-view" title="목록형 보기">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <circle cx="4" cy="6" r="1.5" fill="currentColor"></circle>
+                <circle cx="4" cy="12" r="1.5" fill="currentColor"></circle>
+                <circle cx="4" cy="18" r="1.5" fill="currentColor"></circle>
+              </svg>
+            </button>
+          </div>
+
+          <!-- 새로고침 버튼 -->
+          <button class="icon-btn" id="refresh-btn" title="새로고침">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6"></path>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+          </button>
+
+          <!-- 서버 최신 코드 동기화 버튼 -->
+          <button class="icon-btn" id="server-update-btn" title="서버 코드 최신 업데이트 (Git Sync)">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+          </button>
+
+          <!-- 파일 업로드 메인 버튼 -->
+          <button class="btn btn-primary" id="upload-btn">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>업로드</span>
+          </button>
+          <!-- 숨겨진 파일 인풋 (다중 선택 가능) -->
+          <input type="file" id="file-input" multiple style="display: none;">
+        </div>
+      </header>
+
+      <!-- 툴바 아래 안내 배너 / 드롭 안내 -->
+      <section class="banner-hint" id="banner-hint">
+        <div class="banner-content">
+          <span>💡 <strong>Tip:</strong> 사진이나 파일을 어디서든 화면 위로 끌어다 놓아도 바로 업로드됩니다.</span>
+        </div>
+      </section>
+
+      <!-- 파일 목록 컨테이너 -->
+      <section class="file-section">
+        <!-- 로딩 인디케이터 -->
+        <div class="loading-state hidden" id="loading-state">
+          <div class="apple-spinner"></div>
+          <p>파일 목록을 불러오는 중...</p>
+        </div>
+
+        <!-- 빈 화면 상태 -->
+        <div class="empty-state hidden" id="empty-state">
+          <div class="empty-icon">
+            <svg viewBox="0 0 24 24" width="72" height="72" fill="none" stroke="#86868b" stroke-width="1.2">
+              <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+            </svg>
+          </div>
+          <h3 id="empty-title">파일이 없습니다</h3>
+          <p id="empty-desc">상단의 <strong>업로드</strong> 버튼을 누르거나 파일을 이곳에 드롭하세요.</p>
+          <button class="btn btn-outline" id="empty-upload-btn">파일 선택하기</button>
+        </div>
+
+        <!-- 파일 격자 뷰 -->
+        <div class="file-grid" id="file-grid">
+          <!-- 동적으로 렌더링됨 -->
+        </div>
+
+        <!-- 파일 목록 뷰 -->
+        <div class="file-list-wrap hidden" id="file-list-wrap">
+          <table class="file-table">
+            <thead>
+              <tr>
+                <th class="col-name">이름</th>
+                <th class="col-type">종류</th>
+                <th class="col-size">크기</th>
+                <th class="col-date">수정일</th>
+                <th class="col-actions">작업</th>
+              </tr>
+            </thead>
+            <tbody id="file-list-body">
+              <!-- 동적으로 렌더링됨 -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 라이트박스 미디어 미리보기 모달 -->
+  <div class="preview-modal hidden" id="preview-modal" tabindex="-1">
+    <div class="preview-backdrop" id="preview-backdrop"></div>
+    <div class="preview-wrapper">
+      <div class="preview-header">
+        <div class="preview-file-info">
+          <span class="preview-filename" id="preview-filename">파일명</span>
+          <span class="preview-filesize" id="preview-filesize">0 MB</span>
+        </div>
+        <div class="preview-actions">
+          <button class="preview-btn" id="preview-download-btn" title="다운로드">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>다운로드</span>
+          </button>
+          <button class="preview-btn btn-danger-subtle" id="preview-delete-btn" title="삭제">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </button>
+          <button class="preview-close-btn" id="preview-close-btn" aria-label="닫기">✕</button>
+        </div>
+      </div>
+
+      <div class="preview-body" id="preview-body">
+        <!-- 이미지 또는 비디오가 동적으로 들어감 -->
+      </div>
+
+      <!-- 이전 / 다음 사진 내비게이션 -->
+      <button class="nav-arrow nav-arrow-prev" id="preview-prev-btn" aria-label="이전 파일">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
+      <button class="nav-arrow nav-arrow-next" id="preview-next-btn" aria-label="다음 파일">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- 삭제 확인 모달 -->
+  <div class="confirm-modal hidden" id="delete-modal">
+    <div class="modal-backdrop" id="delete-backdrop"></div>
+    <div class="modal-dialog">
+      <div class="modal-icon-alert">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#ff3b30" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+      </div>
+      <h3>파일을 삭제하시겠습니까?</h3>
+      <p id="delete-modal-msg">삭제된 파일은 서버에서 영구적으로 제거됩니다.</p>
+      <div class="modal-btns">
+        <button class="btn btn-secondary" id="delete-cancel-btn">취소</button>
+        <button class="btn btn-danger" id="delete-confirm-btn">삭제</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 플로팅 업로드 상태창 (Apple 스타일) -->
+  <div class="upload-widget hidden" id="upload-widget">
+    <div class="upload-widget-header">
+      <div class="upload-widget-title">
+        <span class="upload-icon-spinner"></span>
+        <span id="upload-widget-title-text">업로드 중...</span>
+      </div>
+      <button class="upload-widget-close" id="upload-widget-close" title="닫기">✕</button>
+    </div>
+    <div class="upload-widget-list" id="upload-widget-list">
+      <!-- 각 파일별 업로드 바 동적 생성 -->
+    </div>
+  </div>
+
+  <!-- 토스트 알림 컨테이너 -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
