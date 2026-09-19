@@ -4044,3 +4044,95 @@ button:disabled { opacity:.5; cursor:wait; }
 
 .nav-status-chip[data-connection="failed"] { color:#a15c00; background:#fff4e6; }
 .nav-status-chip[data-connection="failed"] .pulse-dot { background:#d99024; animation:none; }
+
+/* Shared motion: short, finite effects; preserve layout and original logo artwork. */
+:root {
+  --motion-fast: 140ms;
+  --motion-normal: 240ms;
+  --motion-enter: 320ms;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes pulseFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes pulseRiseIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulseDialogIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* No transform on view roots: fixed overlays keep their viewport coordinates. */
+  .view-section:not(.hidden) {
+    animation: pulseFadeIn var(--motion-normal) ease-out;
+  }
+  .portal-card, .metric-card, .dash-card {
+    animation: pulseRiseIn var(--motion-enter) var(--motion-ease) backwards;
+  }
+  .portal-card:nth-child(2), .metric-card:nth-child(2) { animation-delay: 40ms; }
+  .portal-card:nth-child(3), .metric-card:nth-child(3) { animation-delay: 80ms; }
+  .metric-card:nth-child(4) { animation-delay: 120ms; }
+
+  /* Fade only so dragging, resizing and minimizing keep their own geometry. */
+  .desktop-window:not(.hidden):not(.window-minimized):not(.mobile-background) {
+    animation: pulseFadeIn var(--motion-normal) ease-out;
+  }
+  .desktop-window {
+    transition: transform var(--motion-normal) var(--motion-ease),
+                opacity var(--motion-normal) ease;
+  }
+  .pulse-dialog[open] {
+    animation: pulseDialogIn var(--motion-normal) var(--motion-ease);
+  }
+  .pulse-dialog[open]::backdrop, .modal-backdrop {
+    animation: pulseFadeIn var(--motion-normal) ease-out;
+  }
+  .preview-modal:not(.hidden), .changelog-modal:not(.hidden) {
+    animation: pulseFadeIn var(--motion-normal) ease-out;
+  }
+  .modal-dialog, .delete-card {
+    animation: pulseDialogIn var(--motion-normal) var(--motion-ease);
+  }
+
+  :is(.btn, .icon-btn, .nav-item, .nav-tab-btn, .finder-nav-item,
+      .win-btn-sm, .preset-cmd-btn, .menubar-item, .dock-item) {
+    transition: background-color var(--motion-fast) ease,
+                color var(--motion-fast) ease,
+                border-color var(--motion-fast) ease,
+                transform var(--motion-fast) var(--motion-ease),
+                opacity var(--motion-fast) ease;
+  }
+  :is(.btn, .icon-btn, .win-btn-sm, .preset-cmd-btn):active:not(:disabled) {
+    transform: scale(0.96);
+  }
+  .dock-item:active { transform: translateY(-2px) scale(0.94); }
+  .file-card, .finder-item {
+    transition: background-color var(--motion-fast) ease,
+                border-color var(--motion-fast) ease,
+                transform var(--motion-fast) var(--motion-ease);
+  }
+  .pulse-dialog input, #search-input, .editor-filename-input {
+    transition: border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+  }
+  .dock-dot { animation: pulseFadeIn var(--motion-fast) ease-out; }
+
+  @media (hover: hover) and (pointer: fine) {
+    .file-card:hover { transform: translateY(-3px); }
+    .finder-item:hover { transform: translateY(-2px); }
+    .btn:hover:not(:disabled), .win-btn-sm:hover:not(:disabled) { transform: translateY(-1px); }
+    .btn:active:not(:disabled), .win-btn-sm:active:not(:disabled) { transform: scale(0.96); }
+  }
+  @media (max-width: 768px) {
+    :root { --motion-normal: 180ms; --motion-enter: 240ms; }
+    .portal-card, .metric-card { animation-delay: 0ms; }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}
