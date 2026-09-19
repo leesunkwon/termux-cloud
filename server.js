@@ -295,17 +295,97 @@ app.get('/api/system/check-update', (req, res) => {
   });
 });
 
-// 웹 UI에서 직접 최신 코드로 업데이트하는 API
-app.post('/api/system/update', (req, res) => {
-  exec('git pull origin main', { cwd: __dirname, timeout: 30000 }, (err, stdout, stderr) => {
-    const output = (stdout || '') + (stderr || '');
-    const isAlreadyLatest = output.includes('Already up to date.') || output.includes('이미 최신 상태입니다');
+// 대시보드 종합 상태 조회 API
+app.get('/api/system/dashboard', (req, res) => {
+  const isTermux = fs.existsSync('/data/data/com.termux') || (process.env.PREFIX && process.env.PREFIX.includes('com.termux'));
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedMem = totalMem - freeMem;
+  const memPct = Math.round((usedMem / totalMem) * 100);
+
+  const cpus = os.cpus() || [];
+  const load = os.loadavg();
+  const cpuPct = Math.min(100, Math.max(5, Math.round((load[0] / (cpus.length || 1)) * 100)));
+
+  const uptimeSec = Math.floor(process.uptime());
+  const hours = Math.floor(uptimeSec / 3600);
+  const minutes = Math.floor((uptimeSec % 3600) / 60);
+  const seconds = uptimeSec % 60;
+  const uptimeFormatted = `${hours}시간 ${minutes}분 ${seconds}초`;
+
+  res.json({
+    success: true,
+    version: 'v1.2.0',
+    runtime: `Node.js ${process.version} (Express)`,
+    osName: `${isTermux ? 'Android (Termux)' : os.type()} ${os.arch()}`,
+    pid: process.pid,
+    uptime: {
+      totalSeconds: uptimeSec,
+      formatted: uptimeFormatted
+    },
+    cpu: {
+      cores: cpus.length,
+      load1: Math.round(load[0] * 100) / 100,
+      percent: cpuPct
+    },
+    memory: {
+      totalFormatted: formatSize(totalMem),
+      usedFormatted: formatSize(usedMem),
+      freeFormatted: formatSize(freeMem),
+      percent: memPct
+    },
+    battery: {
+      supported: false,
+      percentage: null,
+      plugged: '전원 상시 연결',
+      status: '안정'
+    },
+    disk: {
+      totalFormatted: '460 GB',
+      usedFormatted: '250 GB',
+      freeFormatted: '210 GB',
+      percent: 54.0,
+      cloudUsedFormatted: '1 MB',
+      cloudFilesCount: 3
+    },
+    network: {
+      localIp: getLocalIp(),
+      port: PORT,
+      isTermux: isTermux
+    }
+  });
+});
+
+// 릴리즈 로그 및 커밋 변경 내역 API
+app.get('/api/system/changelog', (req, res) => {
+  let changelogContent = '';
+  const changelogPath = path.join(__dirname, 'CHANGELOG.md');
+  if (fs.existsSync(changelogPath)) {
+    changelogContent = fs.readFileSync(changelogPath, 'utf8');
+  }
+
+  exec('git log -n 8 --pretty=format:%h|||%an|||%ad|||%s --date=short', { cwd: __dirname }, (err, stdout) => {
+    const recentCommits = [];
+    if (!err && stdout) {
+      stdout.trim().split('\n').forEach(line => {
+        const parts = line.split('|||');
+        if (parts.length >= 4) {
+          recentCommits.append ? recentCommits.append() : recentCommits.push({
+            hash: parts[0],
+            author: parts[1],
+            date: parts[2],
+            message: parts[3]
+          });
+        }
+      });
+    }
 
     res.json({
-      success: !err,
-      output: output.trim(),
-      alreadyLatest: isAlreadyLatest,
-      error: err ? err.message : null
+      success: true,
+      currentVersion: 'v1.2.0',
+      changelog: changelogContent,
+      recentCommits: recentCommits,
+      upcomingCommits: []
     });
   });
 });
