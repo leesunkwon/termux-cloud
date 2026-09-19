@@ -21,12 +21,11 @@ echo -e "${CYAN}======================================================${NC}"
 # Git 업데이트
 if [ -d ".git" ]; then
     echo -e "${CYAN}[*] GitHub 저장소에서 최신 코드를 내려받습니다...${NC}"
-    if [ -n "$(git status --porcelain)" ]; then
-        echo "커밋하지 않은 변경이 있습니다. 먼저 정리한 뒤 업데이트하세요."
-        exit 1
-    fi
+    # 파일 권한 차이로 인한 변경 오인 방지
+    git config core.filemode false 2>/dev/null || true
+    # 로컬 변경 사항(권한 차이, 로컬 수정 등)이 있더라도 무시하고 GitHub 최신 버전으로 강제 동기화
     git fetch origin main
-    git pull --ff-only origin main
+    git reset --hard origin/main
     chmod +x "$SCRIPT_DIR"/*.sh 2>/dev/null || true
 else
     echo -e "${YELLOW}[!] .git 폴더가 없습니다. 파일을 직접 복사한 환경입니다.${NC}"

@@ -436,10 +436,20 @@ def system_update():
         guards = acquire_restart_guards()
         if guards is None:
             return jsonify(success=False, error='명령 실행 또는 파일 작업이 끝난 뒤 다시 시도하세요.'), 409
-        dirty = subprocess.check_output(['git', 'status', '--porcelain', '-uno'], cwd=BASE_DIR, text=True)
-        if dirty.strip():
-            return jsonify(success=False, error='커밋하지 않은 변경이 있습니다. 서버에서 먼저 정리하세요.'), 409
-        result = subprocess.run(['git', 'pull', '--ff-only', 'origin', 'main'], cwd=BASE_DIR,
+        # Termux/서버 환경의 파일 권한 차이로 인한 변경 오인 방지
+        try:
+            subprocess.run(['git', 'config', 'core.filemode', 'false'], cwd=BASE_DIR, capture_output=True, text=True, timeout=5)
+        except Exception:
+            pass
+
+        # 원격 최신 커밋 가져오기
+        fetch_res = subprocess.run(['git', 'fetch', 'origin', 'main'], cwd=BASE_DIR,
+                                   capture_output=True, text=True, timeout=60)
+        if fetch_res.returncode != 0:
+            return jsonify(success=False, output=(fetch_res.stdout + fetch_res.stderr).strip(), stage='failed'), 500
+
+        # 로컬 변경 사항(권한 차이, 로컬 수정 등)이 있더라도 무시하고 origin/main으로 강제 동기화
+        result = subprocess.run(['git', 'reset', '--hard', 'origin/main'], cwd=BASE_DIR,
                                 capture_output=True, text=True, timeout=60)
         UPDATE_CACHE['time'] = 0
         if result.returncode != 0:

@@ -44,6 +44,9 @@ export PULSE_MANAGED=1
 
 # 디렉토리 준비
 mkdir -p uploads
+if [ -d ".git" ]; then
+    git config core.filemode false 2>/dev/null || true
+fi
 
 # Termux 환경 감지 및 절전 방지 활성화
 if [ -n "$TERMUX_VERSION" ] || [ -d "/data/data/com.termux" ]; then
