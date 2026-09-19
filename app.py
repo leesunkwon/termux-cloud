@@ -17,7 +17,7 @@ from pulse_metrics import Metrics
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
-APP_VERSION = 'v1.6.4'
+APP_VERSION = 'v1.7.0'
 INSTANCE_ID = uuid.uuid4().hex
 SERVER_START_TIME = datetime.now()
 METRICS = Metrics()
