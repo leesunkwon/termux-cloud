@@ -37,6 +37,9 @@ if command -v python3 &>/dev/null; then
     python3 -m pip install -q -r requirements.txt
 fi
 
+# 갱신된 전역 단축 명령어 등록
+bash "$SCRIPT_DIR/install-cli.sh"
+
 # 기존 서버 중지
 echo -e "\n${CYAN}[*] 기존 서버 프로세스를 정리합니다...${NC}"
 ./stop.sh

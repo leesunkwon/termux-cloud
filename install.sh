@@ -85,56 +85,16 @@ mkdir -p "$SCRIPT_DIR/uploads"
 
 # Termux 전역 바로가기 명령어(termux-cloud) 등록
 echo -e "\n${BLUE}[5/5] ⚡ 편리한 단축 명령어 등록 중...${NC}"
-BIN_DIR=""
-if [ "$IS_TERMUX" = true ] && [ -n "$PREFIX" ] && [ -d "$PREFIX/bin" ]; then
-    BIN_DIR="$PREFIX/bin"
-elif [ -d "$HOME/.local/bin" ]; then
-    BIN_DIR="$HOME/.local/bin"
-elif [ -d "$HOME/bin" ]; then
-    BIN_DIR="$HOME/bin"
-fi
-
-if [ -n "$BIN_DIR" ]; then
-    CLI_PATH="$BIN_DIR/termux-cloud"
-    cat <<EOF > "$CLI_PATH"
-#!/bin/bash
-PROJECT_DIR="$SCRIPT_DIR"
-cd "\$PROJECT_DIR" || exit 1
-
-case "\$1" in
-    start)
-        ./start.sh "\${@:2}"
-        ;;
-    stop)
-        ./stop.sh
-        ;;
-    status)
-        ./status.sh
-        ;;
-    update)
-        ./update.sh "\${@:2}"
-        ;;
-    *)
-        ./start.sh "\$@"
-        ;;
-esac
-EOF
-    chmod +x "$CLI_PATH"
-    echo -e "${GREEN}[✓] 어디서든 '${CYAN}termux-cloud${GREEN}'를 입력하여 서버를 관리할 수 있습니다!${NC}"
-else
-    echo -e "${YELLOW}[-] 전역 바로가기는 건너뛰었습니다 (프로젝트 폴더에서 ./start.sh 실행 가능).${NC}"
-fi
+bash "$SCRIPT_DIR/install-cli.sh"
 
 echo -e "\n${GREEN}======================================================${NC}"
 echo -e "${GREEN}  🎉 모든 설치 및 설정이 완료되었습니다!             ${NC}"
 echo -e "${GREEN}======================================================${NC}"
 echo -e "다음 방법으로 언제든지 서버를 실행할 수 있습니다:"
-if [ -n "$BIN_DIR" ]; then
-    echo -e "  👉 ${CYAN}termux-cloud${NC}          (어디서든 실행)"
-    echo -e "  👉 ${CYAN}termux-cloud --bg${NC}     (백그라운드에서 조용히 실행)"
-    echo -e "  👉 ${CYAN}termux-cloud stop${NC}     (실행 중인 서버 종료)"
-    echo -e "  👉 ${CYAN}termux-cloud status${NC}   (서버 상태 확인)"
-fi
+echo -e "  👉 ${CYAN}termux-cloud${NC}          (어디서든 실행)"
+echo -e "  👉 ${CYAN}termux-cloud --bg${NC}     (백그라운드에서 조용히 실행)"
+echo -e "  👉 ${CYAN}termux-cloud stop${NC}     (실행 중인 서버 종료)"
+echo -e "  👉 ${CYAN}termux-cloud status${NC}   (서버 상태 확인)"
 echo -e "  👉 ${CYAN}./start.sh${NC}            (현재 디렉토리에서 실행)"
 echo -e "${GREEN}======================================================${NC}\n"
 

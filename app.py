@@ -14,7 +14,7 @@ from flask import Flask, request, jsonify, send_from_directory, send_file, abort
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
-APP_VERSION = 'v1.5.1'
+APP_VERSION = 'v1.5.2'
 INSTANCE_ID = uuid.uuid4().hex
 SERVER_START_TIME = datetime.now()
 

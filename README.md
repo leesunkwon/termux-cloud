@@ -1,7 +1,7 @@
 # ⚡ Pulse — 스마트폰 개인 클라우드와 웹 데스크톱
 
 Pulse는 남는 안드로이드 스마트폰을 Termux에서 개인 서버로 사용하는 프로젝트입니다.
-현재 버전은 **v1.5.1**입니다. Python/Flask 단일 서버가 Pulse Cloud와 Pulse OS를 제공합니다.
+현재 버전은 **v1.5.2**입니다. Python/Flask 단일 서버가 Pulse Cloud와 Pulse OS를 제공합니다.
 
 ## 설치 및 최초 로그인
 
@@ -32,6 +32,35 @@ python3 setup-auth.py
 | 조회 (`viewer`) | 공용 보관함의 파일 목록·미리보기·다운로드, 시스템 상태 조회 |
 
 계정별 보관함 분리는 제공하지 않습니다. 관리자 터미널은 서버 사용자 권한으로 실제 명령을 실행합니다. noVNC는 별도 서비스이므로 VNC 비밀번호를 설정해야 하며 Pulse 로그인만으로 noVNC 포트가 보호되지는 않습니다.
+
+## 전역 단축 명령어 등록
+
+신규 설치 시 자동 등록합니다. 이미 설치한 스마트폰에서는 최신 코드를 받은 후 한 번만 실행하세요.
+
+```bash
+cd ~/termux-cloud
+git pull --ff-only origin main
+bash install-cli.sh
+```
+
+이후 어떤 폴더에서든 아래 명령을 사용할 수 있습니다.
+
+```bash
+termux-cloud account     # 계정 생성 / 비밀번호·권한 변경
+termux-cloud --bg        # 백그라운드 서버 시작
+termux-cloud status      # 서버 상태·접속 주소·최근 로그
+termux-cloud stop        # 서버 종료
+termux-cloud restart     # 백그라운드 재시작 (계정 변경 후 실행)
+termux-cloud update      # 최신 코드 다운로드 후 백그라운드 재시작
+termux-cloud logs -f     # 실시간 로그 (Ctrl+C로 로그 보기만 종료)
+termux-cloud help        # 전체 명령어 확인
+```
+
+`termux-cloud`만 입력하면 포그라운드 실행입니다. 최초 시작 시 계정이 없으면 터미널에서 등록을 진행합니다. `start`, `restart`, `update` 뒤에 `--bg`, `--port 3000` 등의 실행 옵션을 전달할 수 있습니다. `restart`, `update`에 옵션을 생략하면 `--bg`가 적용됩니다.
+
+전역 실행 파일은 Termux의 `$PREFIX/bin/termux-cloud`에 등록됩니다. 프로젝트 경로에 공백이 있어도 사용할 수 있고 등록을 반복해도 중복 항목이 생기지 않습니다. 명령 처리는 저장소의 `cli.sh`를 사용하므로 이후 Git 업데이트로 새 명령이 반영됩니다. 프로젝트를 옮겼다면 새 위치에서 `bash install-cli.sh`로 다시 등록하세요.
+
+Linux/macOS에서는 `~/.local/bin`에 등록하며, 해당 경로가 PATH에 없으면 추가 명령을 안내합니다. 셸 설정 파일은 자동 변경하지 않습니다.
 
 ## 실행과 접속
 
