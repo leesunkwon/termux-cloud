@@ -951,33 +951,45 @@
       card.innerHTML = `
         <div class="file-thumbnail-wrap">
           ${thumbContent}
+          <div class="file-card-actions">
+            <button class="card-action-btn btn-dl" title="다운로드" data-action="download">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            </button>
+            <button class="card-action-btn btn-del" title="삭제" data-action="delete">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+          </div>
         </div>
         <div class="file-card-info">
           <div class="file-card-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
           <div class="file-card-meta">
-            <span>${file.sizeFormatted}</span>
-            <span>${file.dateFormatted}</span>
+            <span class="file-meta-size">${file.sizeFormatted}</span>
+            <span class="file-meta-date">${file.dateFormatted}</span>
           </div>
-        </div>
-        <div class="file-card-hover-actions">
-          <button class="card-action-btn btn-dl" title="다운로드" data-action="download">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          </button>
-          <button class="card-action-btn btn-del" title="삭제" data-action="delete">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-          </button>
         </div>
       `;
 
-      card.addEventListener('click', (e) => {
-        const actionBtn = e.target.closest('.card-action-btn');
-        if (actionBtn) {
+      const btnDl = card.querySelector('.btn-dl');
+      const btnDel = card.querySelector('.btn-del');
+
+      if (btnDl) {
+        btnDl.addEventListener('click', (e) => {
           e.stopPropagation();
-          const action = actionBtn.getAttribute('data-action');
-          if (action === 'download') downloadFile(file.name);
-          if (action === 'delete') promptDeleteFile(file);
-          return;
-        }
+          e.preventDefault();
+          downloadFile(file.name);
+        });
+      }
+
+      if (btnDel) {
+        btnDel.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          promptDeleteFile(file);
+        });
+      }
+
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.card-action-btn')) return;
         openPreview(index);
       });
 
@@ -1004,32 +1016,50 @@
         <td class="col-size">${file.sizeFormatted}</td>
         <td class="col-date">${file.dateFormatted}</td>
         <td class="col-actions">
-          <button class="row-action-btn btn-view" title="미리보기">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path></svg>
-          </button>
-          <button class="row-action-btn btn-dl" title="다운로드">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          </button>
-          <button class="row-action-btn btn-del" title="삭제">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-          </button>
+          <div class="row-actions-wrap">
+            <button class="row-action-btn btn-view" title="미리보기">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path></svg>
+            </button>
+            <button class="row-action-btn btn-dl" title="다운로드">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            </button>
+            <button class="row-action-btn btn-del" title="삭제">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+          </div>
         </td>
       `;
 
-      tr.querySelector('.btn-view').addEventListener('click', (e) => {
-        e.stopPropagation();
+      const btnView = tr.querySelector('.btn-view');
+      const btnDl = tr.querySelector('.btn-dl');
+      const btnDel = tr.querySelector('.btn-del');
+
+      if (btnView) {
+        btnView.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          openPreview(index);
+        });
+      }
+      if (btnDl) {
+        btnDl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          downloadFile(file.name);
+        });
+      }
+      if (btnDel) {
+        btnDel.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          promptDeleteFile(file);
+        });
+      }
+
+      tr.addEventListener('click', (e) => {
+        if (e.target.closest('.row-action-btn')) return;
         openPreview(index);
       });
-      tr.querySelector('.btn-dl').addEventListener('click', (e) => {
-        e.stopPropagation();
-        downloadFile(file.name);
-      });
-      tr.querySelector('.btn-del').addEventListener('click', (e) => {
-        e.stopPropagation();
-        promptDeleteFile(file);
-      });
-
-      tr.addEventListener('click', () => openPreview(index));
       el.fileListBody.appendChild(tr);
     });
   }
@@ -1208,13 +1238,19 @@
     if (!state.pendingDeleteFile) return;
     const file = state.pendingDeleteFile;
     closeDeleteModal();
+    if (el.previewModal && !el.previewModal.classList.contains('hidden')) {
+      closePreview();
+    }
 
     try {
       const res = await fetch(`/api/files/${encodeURIComponent(file.name)}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
         showToast(`'${file.name}' 파일이 삭제되었습니다.`);
-        fetchFiles();
+        await fetchFiles();
+        if (typeof renderFinderFiles === 'function') {
+          renderFinderFiles();
+        }
         fetchStorageStats();
         fetchDashboardData(true);
       } else {
