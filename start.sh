@@ -42,8 +42,9 @@ done
 export PORT
 export PULSE_MANAGED=1
 
-# 디렉토리 준비
+# 디렉토리 준비 및 레거시 샘플 파일 정리
 mkdir -p uploads
+rm -f "$SCRIPT_DIR/uploads/sample_photo.svg" "$SCRIPT_DIR/uploads/환영합니다.txt" 2>/dev/null || true
 if [ -d ".git" ]; then
     git config core.filemode false 2>/dev/null || true
 fi

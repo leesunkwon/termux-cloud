@@ -25,11 +25,9 @@ yarn-error.log*
 *.pid
 .server.pid
 
-# Uploaded user files (기본 샘플 파일과 .gitkeep은 보존)
+# Uploaded user files (.gitkeep만 보존)
 uploads/*
 !uploads/.gitkeep
-!uploads/sample_photo.svg
-!uploads/환영합니다.txt
 
 # Editor / IDE
 .vscode/

@@ -27,6 +27,8 @@ if [ -d ".git" ]; then
     git fetch origin main
     git reset --hard origin/main
     chmod +x "$SCRIPT_DIR"/*.sh 2>/dev/null || true
+    # 레거시 기본 샘플 파일 정리
+    rm -f "$SCRIPT_DIR/uploads/sample_photo.svg" "$SCRIPT_DIR/uploads/환영합니다.txt" 2>/dev/null || true
 else
     echo -e "${YELLOW}[!] .git 폴더가 없습니다. 파일을 직접 복사한 환경입니다.${NC}"
 fi
