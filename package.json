@@ -1,6 +1,6 @@
 {
   "name": "pulse-server",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Pulse (Pulse Cloud & Pulse OS) personal server for Termux and smartphones",
   "main": "server.js",
   "scripts": {

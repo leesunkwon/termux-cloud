@@ -1959,6 +1959,7 @@ body {
 }
 
 .toast {
+  pointer-events: auto;
   background: rgba(29, 29, 31, 0.9);
   backdrop-filter: blur(12px);
   color: #ffffff;
@@ -1970,7 +1971,19 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  animation: toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1), toastOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) 2.7s forwards;
+  animation: toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast.toast-out {
+  animation: toastOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.toast .btn {
+  pointer-events: auto;
+  margin-left: 4px;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 @keyframes toastIn {
@@ -3730,8 +3743,66 @@ body {
 
 .finder-content {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
   padding: 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.finder-path-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  padding-bottom: 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.finder-path-up {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #f2f2f7;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  margin-right: 4px;
+  color: var(--text-main);
+}
+
+.finder-path-up:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.finder-path-seg {
+  background: none;
+  border: none;
+  color: var(--apple-blue);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 550;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+.finder-path-seg:hover:not(.current) {
+  background: rgba(0, 113, 227, 0.1);
+}
+
+.finder-path-seg.current {
+  color: var(--text-main);
+  cursor: default;
+}
+
+.finder-path-sep {
+  color: var(--text-secondary);
+  opacity: 0.55;
+  font-size: 12px;
 }
 
 .finder-grid {

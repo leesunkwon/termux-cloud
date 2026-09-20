@@ -346,13 +346,13 @@
 
     // Copy Wi-Fi IP button
     if (el.btnCopyWifiIp) {
-      el.btnCopyWifiIp.addEventListener('click', () => {
+      el.btnCopyWifiIp.addEventListener('click', async () => {
         const text = el.dashIpWifi.textContent;
-        navigator.clipboard.writeText(text).then(() => {
+        if (await copyToClipboard(text)) {
           showToast('✓ 주소가 클립보드에 복사되었습니다: ' + text);
-        }).catch(() => {
+        } else {
           showToast('복사 실패');
-        });
+        }
       });
     }
 
@@ -502,13 +502,13 @@
     if (el.previewNextBtn) el.previewNextBtn.addEventListener('click', showNextPreview);
 
     if (el.previewCopyTextBtn) {
-      el.previewCopyTextBtn.addEventListener('click', () => {
+      el.previewCopyTextBtn.addEventListener('click', async () => {
         if (!state.activePreviewText) return;
-        navigator.clipboard.writeText(state.activePreviewText).then(() => {
+        if (await copyToClipboard(state.activePreviewText)) {
           showToast('✓ 파일 전체 내용이 클립보드에 복사되었습니다.');
-        }).catch(() => {
+        } else {
           showToast('복사 실패');
-        });
+        }
       });
     }
 
@@ -1135,7 +1135,8 @@
   let fileRequest = 0;
   async function fetchFiles() {
     const requestId = ++fileRequest;
-    el.loadingState.classList.remove('hidden');
+    if (el.loadingState) el.loadingState.classList.remove('hidden');
+    if (el.emptyState) el.emptyState.classList.add('hidden');
     try {
       const query = new URLSearchParams({ path: state.folder, page: state.page, limit: 60,
         q: state.searchQuery, type: state.currentFilter, sort: state.sortBy });
@@ -1241,6 +1242,8 @@
     if (list.length === 0) {
       el.fileGrid.innerHTML = '';
       el.fileListBody.innerHTML = '';
+      if (el.fileGrid) el.fileGrid.classList.add('hidden');
+      if (el.fileListWrap) el.fileListWrap.classList.add('hidden');
       el.emptyState.classList.remove('hidden');
       if (state.searchQuery) {
         el.emptyTitle.textContent = '검색 결과가 없습니다';
@@ -1257,6 +1260,8 @@
     }
 
     el.emptyState.classList.add('hidden');
+    if (el.fileGrid) el.fileGrid.classList.toggle('hidden', state.viewMode !== 'grid');
+    if (el.fileListWrap) el.fileListWrap.classList.toggle('hidden', state.viewMode !== 'list');
 
     if (state.viewMode === 'grid') {
       renderGrid(list);
@@ -1796,7 +1801,7 @@
       el.dropOverlay.classList.add('hidden');
 
       if (e.dataTransfer && e.dataTransfer.files.length > 0) {
-        switchAppView('cloud');
+        if (state.currentAppView !== 'desktop') switchAppView('cloud');
         uploadFiles(e.dataTransfer.files);
       }
     });
@@ -2258,7 +2263,9 @@
     // Desktop shortcut icons
     document.querySelectorAll('.desktop-shortcut').forEach(sc => {
       const appId = sc.getAttribute('data-app');
-      sc.addEventListener('click', () => openDesktopWindow(appId));
+      sc.addEventListener('click', () => {
+        if (window.innerWidth <= 768) openDesktopWindow(appId);
+      });
       sc.addEventListener('dblclick', () => openDesktopWindow(appId));
       sc.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') openDesktopWindow(appId);
@@ -2289,6 +2296,18 @@
     const appleBtn = document.getElementById('btn-desktop-apple');
     if (appleBtn) {
       appleBtn.addEventListener('click', () => openDesktopWindow('about'));
+    }
+
+    const ipBadge = document.getElementById('menubar-ip-badge');
+    if (ipBadge) {
+      ipBadge.style.cursor = 'pointer';
+      ipBadge.title = '클릭하여 IP 복사';
+      ipBadge.addEventListener('click', async () => {
+        const ip = document.getElementById('menubar-ip-text')?.textContent;
+        if (ip && ip !== '192.168.X.X' && await copyToClipboard(ip)) {
+          showToast(`IP 주소(${ip})가 클립보드에 복사되었습니다.`);
+        }
+      });
     }
 
     const fsBtn = document.getElementById('btn-desktop-fullscreen');
@@ -2926,15 +2945,26 @@
       });
     }
 
-    // Filter sidebar
+    // Filter sidebar (Finder only — do not change Pulse Cloud filters)
     document.querySelectorAll('.finder-nav-item').forEach(item => {
       item.addEventListener('click', () => {
         document.querySelectorAll('.finder-nav-item').forEach(i => i.classList.remove('active'));
         item.classList.add('active');
-        state.currentFilter = item.getAttribute('data-finder-filter') || 'all';
-        state.page = 1;
-        fetchFiles();
+        state.finderFilter = item.getAttribute('data-finder-filter') || 'all';
+        renderFinderFiles();
       });
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (state.currentAppView !== 'desktop' || state.activeDesktopApp !== 'finder') return;
+      const tag = document.activeElement ? document.activeElement.tagName : '';
+      if (['INPUT', 'TEXTAREA'].includes(tag) || document.activeElement?.isContentEditable) return;
+      if (e.key === 'Enter') {
+        const selected = document.querySelector('#finder-file-grid .finder-item.selected');
+        if (!selected) return;
+        e.preventDefault();
+        selected.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      }
     });
   }
 
@@ -2949,18 +2979,76 @@
     return '📄';
   }
 
+  function renderFinderPath() {
+    const bar = document.getElementById('finder-path-bar');
+    if (!bar) return;
+    bar.innerHTML = '';
+
+    const upBtn = document.createElement('button');
+    upBtn.type = 'button';
+    upBtn.className = 'finder-path-up';
+    upBtn.title = '상위 폴더';
+    upBtn.textContent = '↑';
+    upBtn.disabled = !state.folder;
+    upBtn.addEventListener('click', () => {
+      if (!state.folder) return;
+      navigateFolder(state.folder.split('/').slice(0, -1).join('/'));
+    });
+    bar.appendChild(upBtn);
+
+    const root = document.createElement('button');
+    root.type = 'button';
+    root.className = `finder-path-seg ${!state.folder ? 'current' : ''}`;
+    root.textContent = '내 보관함';
+    if (state.folder) root.addEventListener('click', () => navigateFolder(''));
+    bar.appendChild(root);
+
+    if (!state.folder) return;
+    const parts = state.folder.split('/').filter(Boolean);
+    let accumulated = '';
+    parts.forEach((part, idx) => {
+      accumulated = accumulated ? `${accumulated}/${part}` : part;
+      const sep = document.createElement('span');
+      sep.className = 'finder-path-sep';
+      sep.textContent = '/';
+      bar.appendChild(sep);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      const isLast = idx === parts.length - 1;
+      btn.className = `finder-path-seg ${isLast ? 'current' : ''}`;
+      btn.textContent = part;
+      const target = accumulated;
+      if (!isLast) btn.addEventListener('click', () => navigateFolder(target));
+      bar.appendChild(btn);
+    });
+  }
+
   function renderFinderFiles() {
     const grid = document.getElementById('finder-file-grid');
     const status = document.getElementById('finder-status-text');
     if (!grid) return;
     grid.innerHTML = '';
+    renderFinderPath();
 
-    const list = state.files;
+    const filter = state.finderFilter || 'all';
+    const list = filter === 'all' ? (state.files || []) : (state.files || []).filter(f => f.type === filter);
 
-    if (status) status.textContent = `${state.total}개 항목 · ${state.page}/${state.pages}페이지`;
+    if (status) {
+      const extra = filter === 'all' ? `${state.total}개 항목 · ${state.page}/${state.pages}페이지` : `${list.length}개 표시 중`;
+      status.textContent = extra;
+    }
 
     if (list.length === 0) {
-      grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #86868b; padding: 24px; font-size: 13px;">파일이 없습니다.</div>';
+      const empty = document.createElement('div');
+      empty.style.cssText = 'grid-column:1/-1;text-align:center;color:#86868b;padding:28px 12px;font-size:13px;line-height:1.5';
+      if (filter !== 'all') {
+        empty.textContent = '이 종류에 해당하는 항목이 없습니다.';
+      } else if (state.folder) {
+        empty.textContent = '이 폴더가 비어 있습니다. 상단의 새 폴더나 새 파일 버튼을 이용해 보세요.';
+      } else {
+        empty.textContent = '보관함이 비어 있습니다. 파일을 업로드하거나 새 폴더를 만들어 보세요.';
+      }
+      grid.appendChild(empty);
       return;
     }
 
@@ -3321,13 +3409,13 @@
     if (refreshBtn) refreshBtn.addEventListener('click', checkVncStatus);
     if (connectBtn) connectBtn.addEventListener('click', checkVncStatus);
     if (copyCmdBtn) {
-      copyCmdBtn.addEventListener('click', () => {
+      copyCmdBtn.addEventListener('click', async () => {
         const cmd = './setup-desktop.sh start';
-        navigator.clipboard.writeText(cmd).then(() => {
+        if (await copyToClipboard(cmd)) {
           showToast('✓ 구축 명령어가 복사되었습니다: ' + cmd);
-        }).catch(() => {
+        } else {
           showToast('복사 실패');
-        });
+        }
       });
     }
   }
@@ -3505,9 +3593,12 @@
 
         currentItems.push({
           type: 'calc',
-          action: () => {
-            navigator.clipboard?.writeText(String(mathResult));
-            showToast(`계산 결과(${formattedResult})가 클립보드에 복사되었습니다.`);
+          action: async () => {
+            if (await copyToClipboard(String(mathResult))) {
+              showToast(`계산 결과(${formattedResult})가 클립보드에 복사되었습니다.`);
+            } else {
+              showToast(`계산 결과: ${formattedResult}`);
+            }
           }
         });
       }
@@ -3770,9 +3861,6 @@
     if (activeShortcut && activeShortcut.dataset.path) {
       return state.files.find(f => f.path === activeShortcut.dataset.path);
     }
-    if (state.files && state.files.length > 0 && state.activeDesktopApp === 'finder') {
-      return state.files[0];
-    }
     return null;
   }
 
@@ -3951,12 +4039,16 @@
 
     window.addEventListener('keydown', (e) => {
       if (state.currentAppView !== 'desktop') return;
+      if (e.key === 'Escape' && missionControlActive) {
+        e.preventDefault();
+        deactivateMissionControl();
+        return;
+      }
+      const tag = document.activeElement ? document.activeElement.tagName : '';
+      if (['INPUT', 'TEXTAREA'].includes(tag) || document.activeElement?.isContentEditable) return;
       if (e.key === 'F3' || ((e.ctrlKey || e.metaKey) && e.key === 'ArrowUp')) {
         e.preventDefault();
         toggleMissionControl();
-      } else if (e.key === 'Escape' && missionControlActive) {
-        e.preventDefault();
-        deactivateMissionControl();
       }
     });
   }
@@ -4107,11 +4199,10 @@
 
     const copyIpBtn = document.getElementById('btn-cc-copy-ip');
     if (copyIpBtn) {
-      copyIpBtn.addEventListener('click', (e) => {
+      copyIpBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const ip = document.getElementById('cc-ip-val')?.textContent || '';
-        if (ip) {
-          navigator.clipboard?.writeText(ip);
+        if (ip && await copyToClipboard(ip)) {
           showToast(`IP 주소(${ip})가 클립보드에 복사되었습니다.`);
         }
       });
@@ -4301,6 +4392,8 @@
     const vinyl = document.getElementById('music-vinyl');
 
     if (!audio) return;
+    audio.volume = 0.8;
+    if (volSlider) volSlider.value = 80;
 
     if (playBtn) {
       playBtn.addEventListener('click', () => {
@@ -4368,6 +4461,10 @@
     if (volSlider) {
       volSlider.addEventListener('input', (e) => {
         audio.volume = e.target.value / 100;
+        const ccVol = document.getElementById('cc-volume-slider');
+        const ccVal = document.getElementById('cc-volume-val');
+        if (ccVol) ccVol.value = e.target.value;
+        if (ccVal) ccVal.textContent = `${e.target.value}%`;
       });
     }
 
@@ -4415,13 +4512,32 @@
   }
 
   // ================= Utilities =================
+  async function copyToClipboard(text) {
+    if (text == null || text === '') return false;
+    try {
+      await navigator.clipboard.writeText(String(text));
+      return true;
+    } catch (_) {
+      const ta = document.createElement('textarea');
+      ta.value = String(text);
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    }
+  }
+
   function showToast(message, retry, actionLabel = '다시 시도') {
     const toast = document.createElement('div');
     toast.className = 'toast';
-    toast.innerHTML = `
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-      <span>${escapeHtml(message)}</span>
-    `;
+    const icon = retry
+      ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>'
+      : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    toast.innerHTML = `${icon}<span>${escapeHtml(message)}</span>`;
     toast.setAttribute('role', 'status');
     if (retry) {
       const button = document.createElement('button');
@@ -4431,9 +4547,12 @@
       toast.appendChild(button);
     }
     el.toastContainer.appendChild(toast);
+    const lifetime = retry ? 10000 : 4000;
     setTimeout(() => {
-      if (toast.parentNode) toast.parentNode.removeChild(toast);
-    }, retry ? 10000 : 4000);
+      if (!toast.parentNode) return;
+      toast.classList.add('toast-out');
+      setTimeout(() => toast.remove(), 320);
+    }, lifetime - 320);
   }
 
   function getTypeLabel(type) {
