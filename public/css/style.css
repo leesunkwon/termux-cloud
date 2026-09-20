@@ -190,6 +190,7 @@ body {
   font-weight: 500;
 }
 
+.folder-color { color: #0071e3; }
 .photos-color { color: #2997ff; }
 .video-color { color: #ff375f; }
 .docs-color { color: #ff9f0a; }
@@ -878,6 +879,168 @@ body {
   color: #005bb5;
 }
 
+/* ================= Cloud Folder Breadcrumb Bar ================= */
+.cloud-breadcrumb-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 24px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border-light);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.breadcrumb-trail {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.breadcrumb-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+}
+
+.breadcrumb-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--apple-blue);
+}
+
+.breadcrumb-item.active {
+  color: var(--text-main);
+  font-weight: 650;
+  background: rgba(0, 113, 227, 0.08);
+  color: var(--apple-blue);
+}
+
+.breadcrumb-sep {
+  color: var(--text-secondary);
+  opacity: 0.45;
+  font-size: 12px;
+  user-select: none;
+  padding: 0 2px;
+}
+
+.btn-breadcrumb-up {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-light);
+  background: #ffffff;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text-main);
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  transition: all 0.14s ease;
+}
+
+.btn-breadcrumb-up:hover {
+  background: rgba(0, 113, 227, 0.08);
+  border-color: rgba(0, 113, 227, 0.35);
+  color: var(--apple-blue);
+  transform: translateY(-1px);
+}
+
+.btn-cloud-new-folder {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  font-weight: 550;
+  background: #ffffff;
+  border: 1px solid var(--border-light);
+  color: var(--text-main);
+  transition: all 0.12s ease;
+}
+
+.btn-cloud-new-folder:hover:not(:disabled) {
+  background: rgba(0, 113, 227, 0.06);
+  border-color: rgba(0, 113, 227, 0.35);
+  color: var(--apple-blue);
+  transform: translateY(-1px);
+}
+
+/* ================= Folder Card Styling ================= */
+.file-card-folder {
+  border: 1px solid rgba(0, 113, 227, 0.22);
+  background: #ffffff;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s;
+}
+
+.file-card-folder:hover {
+  border-color: rgba(0, 113, 227, 0.5);
+  box-shadow: 0 8px 24px rgba(0, 113, 227, 0.14);
+  transform: translateY(-3px);
+}
+
+.file-card-folder.drag-hover-folder {
+  border: 2px dashed #0071e3 !important;
+  background: rgba(0, 113, 227, 0.06) !important;
+  transform: scale(1.03);
+}
+
+.file-thumb-folder-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(180deg, #f2f7ff 0%, #e6efff 100%);
+  position: relative;
+}
+
+.folder-svg-icon {
+  width: 54px;
+  height: 54px;
+  filter: drop-shadow(0 3px 6px rgba(0, 113, 227, 0.2));
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.file-card-folder:hover .folder-svg-icon {
+  transform: scale(1.1);
+}
+
+.folder-badge-tag {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: rgba(0, 113, 227, 0.12);
+  color: #0071e3;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+}
+
 /* ================= File Section ================= */
 .file-section {
   flex: 1;
@@ -1070,13 +1233,15 @@ body {
   border: 1.5px solid transparent;
 }
 
-.card-action-btn.btn-dl {
+.card-action-btn.btn-dl,
+.card-action-btn.btn-open {
   background: rgba(235, 244, 255, 0.96);
   color: var(--apple-blue);
   border-color: rgba(0, 113, 227, 0.35);
 }
 
-.card-action-btn.btn-dl:hover, .card-action-btn.btn-dl:active {
+.card-action-btn.btn-dl:hover, .card-action-btn.btn-dl:active,
+.card-action-btn.btn-open:hover, .card-action-btn.btn-open:active {
   transform: scale(1.15);
   background: var(--apple-blue);
   color: #ffffff;

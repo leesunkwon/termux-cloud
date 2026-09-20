@@ -94,6 +94,10 @@
     sortSelect: document.getElementById('sort-select'),
     btnGridView: document.getElementById('btn-grid-view'),
     btnListView: document.getElementById('btn-list-view'),
+    btnCloudNewFolder: document.getElementById('btn-cloud-new-folder'),
+    cloudBreadcrumbBar: document.getElementById('cloud-breadcrumb-bar'),
+    breadcrumbTrail: document.getElementById('breadcrumb-trail'),
+    btnCloudUp: document.getElementById('btn-cloud-up'),
     uploadBtn: document.getElementById('upload-btn'),
     fileInput: document.getElementById('file-input'),
 
@@ -102,6 +106,7 @@
     mobileMenuBtn: document.getElementById('mobile-menu-btn'),
     navItems: document.querySelectorAll('.nav-item'),
     countAll: document.getElementById('count-all'),
+    countFolder: document.getElementById('count-folder'),
     countImage: document.getElementById('count-image'),
     countVideo: document.getElementById('count-video'),
     countDoc: document.getElementById('count-document'),
@@ -451,6 +456,35 @@
           uploadFiles(e.target.files);
           el.fileInput.value = '';
         }
+      });
+    }
+
+    // Cloud New Folder & Up Directory
+    if (el.btnCloudNewFolder) {
+      el.btnCloudNewFolder.addEventListener('click', async () => {
+        const name = await Pulse.ask('생성할 폴더명을 입력하세요:', { input: true, value: '새 폴더' });
+        if (!name || !name.trim()) return;
+        const cleanName = name.trim();
+        if (cleanName.includes('/') || cleanName.includes('\\')) {
+          showToast('폴더 이름에 경로 구분자를 사용할 수 없습니다.');
+          return;
+        }
+        try {
+          await Pulse.post('/api/folders', { path: joinPath(cleanName) });
+          showToast(`'${cleanName}' 폴더가 생성되었습니다.`);
+          await fetchFiles();
+          if (typeof renderFinderFiles === 'function') renderFinderFiles();
+        } catch (err) {
+          showToast('폴더 생성 실패: ' + err.message);
+        }
+      });
+    }
+
+    if (el.btnCloudUp) {
+      el.btnCloudUp.addEventListener('click', () => {
+        if (!state.folder) return;
+        const parent = state.folder.split('/').slice(0, -1).join('/');
+        navigateFolder(parent);
       });
     }
 
@@ -811,7 +845,55 @@
     state.searchQuery = '';
     if (el.searchInput) el.searchInput.value = '';
     state.selected.clear();
+    if (state.currentFilter !== 'all') {
+      state.currentFilter = 'all';
+      el.navItems.forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-filter') === 'all');
+      });
+      updateTitle();
+    }
     fetchFiles();
+  }
+
+  function renderBreadcrumbs() {
+    if (!el.breadcrumbTrail) return;
+    el.breadcrumbTrail.innerHTML = '';
+
+    const rootBtn = document.createElement('button');
+    rootBtn.className = `breadcrumb-item ${!state.folder ? 'active' : ''}`;
+    rootBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>내 보관함</span>
+    `;
+    rootBtn.addEventListener('click', () => navigateFolder(''));
+    el.breadcrumbTrail.appendChild(rootBtn);
+
+    if (state.folder) {
+      if (el.btnCloudUp) el.btnCloudUp.classList.remove('hidden');
+      const parts = state.folder.split('/').filter(Boolean);
+      let accumulated = '';
+      parts.forEach((part, idx) => {
+        accumulated = accumulated ? `${accumulated}/${part}` : part;
+        const targetPath = accumulated;
+        const isLast = idx === parts.length - 1;
+
+        const sep = document.createElement('span');
+        sep.className = 'breadcrumb-sep';
+        sep.textContent = '/';
+        el.breadcrumbTrail.appendChild(sep);
+
+        const btn = document.createElement('button');
+        btn.className = `breadcrumb-item ${isLast ? 'active' : ''}`;
+        btn.innerHTML = `
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <span>${escapeHtml(part)}</span>
+        `;
+        btn.addEventListener('click', () => navigateFolder(targetPath));
+        el.breadcrumbTrail.appendChild(btn);
+      });
+    } else {
+      if (el.btnCloudUp) el.btnCloudUp.classList.add('hidden');
+    }
   }
   function addSelection(container, file, inline = false) {
     if (!Pulse.isAdmin) return;
@@ -1121,6 +1203,7 @@
   function updateCounts() {
     const counts = state.counts;
     if (el.countAll) el.countAll.textContent = counts.all;
+    if (el.countFolder) el.countFolder.textContent = counts.folder || 0;
     if (el.countImage) el.countImage.textContent = counts.image;
     if (el.countVideo) el.countVideo.textContent = counts.video;
     if (el.countDoc) el.countDoc.textContent = counts.document;
@@ -1144,6 +1227,7 @@
   }
 
   function render() {
+    renderBreadcrumbs();
     const list = state.files;
 
     state.filteredFiles = list;
@@ -1161,6 +1245,10 @@
       if (state.searchQuery) {
         el.emptyTitle.textContent = '검색 결과가 없습니다';
         el.emptyDesc.textContent = `"${state.searchQuery}"에 일치하는 파일이 없습니다.`;
+      } else if (state.folder) {
+        const folderName = state.folder.split('/').pop() || state.folder;
+        el.emptyTitle.textContent = `'${folderName}' 폴더가 비어 있습니다`;
+        el.emptyDesc.textContent = "상단의 '업로드' 또는 '새 폴더' 버튼을 눌러 파일을 추가하세요.";
       } else {
         el.emptyTitle.textContent = '파일이 없습니다';
         el.emptyDesc.textContent = '상단의 업로드 버튼을 누르거나 파일을 드롭하세요.';
@@ -1181,11 +1269,21 @@
     el.fileGrid.innerHTML = '';
     files.forEach((file, index) => {
       const card = document.createElement('div');
-      card.className = 'file-card';
+      const isFolder = file.type === 'folder';
+      card.className = isFolder ? 'file-card file-card-folder' : 'file-card';
       card.setAttribute('data-index', index);
 
       let thumbContent = '';
-      if (file.type === 'image' && file.thumbnailUrl) {
+      if (isFolder) {
+        thumbContent = `
+          <div class="file-thumb-folder-placeholder">
+            <svg class="folder-svg-icon" viewBox="0 0 24 24" width="54" height="54" fill="#ffd159" stroke="#e09d17" stroke-width="1.2">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span class="folder-badge-tag">폴더</span>
+          </div>
+        `;
+      } else if (file.type === 'image' && file.thumbnailUrl) {
         thumbContent = `<img class="file-thumb-img" src="${escapeHtml(file.thumbnailUrl)}" alt="${escapeHtml(file.name)}" loading="lazy">`;
       } else if (file.type === 'video') {
         thumbContent = `
@@ -1197,7 +1295,7 @@
       } else if (file.isText || file.type === 'document') {
         thumbContent = `
           <div class="file-thumb-doc-placeholder">
-            <span class="doc-badge-ext">${escapeHtml(file.extension.toUpperCase()) || 'TXT'}</span>
+            <span class="doc-badge-ext">${escapeHtml(file.extension ? file.extension.toUpperCase() : 'TXT')}</span>
             <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
           </div>
         `;
@@ -1205,7 +1303,7 @@
         thumbContent = `
           <div class="file-thumb-icon-placeholder">
             ${getFileTypeIconSvg(file.type)}
-            <span class="doc-badge-ext">${escapeHtml(file.extension.toUpperCase())}</span>
+            <span class="doc-badge-ext">${escapeHtml(file.extension ? file.extension.toUpperCase() : 'FILE')}</span>
           </div>
         `;
       }
@@ -1214,9 +1312,13 @@
         <div class="file-thumbnail-wrap">
           ${thumbContent}
           <div class="file-card-actions">
+            ${isFolder ? `
+            <button class="card-action-btn btn-open" title="폴더 열기" data-action="open">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+            </button>` : `
             <button class="card-action-btn btn-dl" title="다운로드" data-action="download">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-            </button>
+            </button>`}
             <button class="card-action-btn btn-del" title="삭제" data-action="delete">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
             </button>
@@ -1231,15 +1333,23 @@
         </div>
       `;
 
+      const btnOpen = card.querySelector('.btn-open');
       const btnDl = card.querySelector('.btn-dl');
       const btnDel = card.querySelector('.btn-del');
+
+      if (btnOpen) {
+        btnOpen.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          navigateFolder(file.path);
+        });
+      }
 
       if (btnDl) {
         btnDl.addEventListener('click', (e) => {
           e.stopPropagation();
           e.preventDefault();
-          if (file.type === 'folder') navigateFolder(file.path);
-          else downloadFile(file.path || file.name);
+          downloadFile(file.path || file.name);
         });
       }
 
@@ -1253,8 +1363,37 @@
 
       card.addEventListener('click', (e) => {
         if (e.target.closest('.card-action-btn')) return;
-        openPreview(index);
+        if (isFolder) {
+          navigateFolder(file.path);
+        } else {
+          openPreview(index);
+        }
       });
+
+      if (isFolder) {
+        card.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          card.classList.add('drag-hover-folder');
+        });
+        card.addEventListener('dragleave', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          card.classList.remove('drag-hover-folder');
+        });
+        card.addEventListener('drop', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          card.classList.remove('drag-hover-folder');
+          if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            for (const f of Array.from(e.dataTransfer.files)) {
+              uploadQueue.push({ file: f, folder: file.path });
+            }
+            pumpUploads();
+            showToast(`'${file.name}' 폴더로 ${e.dataTransfer.files.length}개 파일 업로드를 시작합니다.`);
+          }
+        });
+      }
 
       addSelection(card, file);
       card.querySelector('img')?.addEventListener('error', event => { event.target.hidden = true; });
@@ -1266,7 +1405,8 @@
     el.fileListBody.innerHTML = '';
     files.forEach((file, index) => {
       const tr = document.createElement('tr');
-      tr.className = 'file-row';
+      const isFolder = file.type === 'folder';
+      tr.className = isFolder ? 'file-row file-row-folder' : 'file-row';
 
       tr.innerHTML = `
         <td class="col-name">
@@ -1282,12 +1422,16 @@
         <td class="col-date">${file.dateFormatted}</td>
         <td class="col-actions">
           <div class="row-actions-wrap">
+            ${isFolder ? `
+            <button class="row-action-btn btn-open" title="폴더 열기">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+            </button>` : `
             <button class="row-action-btn btn-view" title="미리보기">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path></svg>
             </button>
             <button class="row-action-btn btn-dl" title="다운로드">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-            </button>
+            </button>`}
             <button class="row-action-btn btn-del" title="삭제">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
             </button>
@@ -1295,10 +1439,18 @@
         </td>
       `;
 
+      const btnOpen = tr.querySelector('.btn-open');
       const btnView = tr.querySelector('.btn-view');
       const btnDl = tr.querySelector('.btn-dl');
       const btnDel = tr.querySelector('.btn-del');
 
+      if (btnOpen) {
+        btnOpen.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          navigateFolder(file.path);
+        });
+      }
       if (btnView) {
         btnView.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -1310,8 +1462,7 @@
         btnDl.addEventListener('click', (e) => {
           e.stopPropagation();
           e.preventDefault();
-          if (file.type === 'folder') navigateFolder(file.path);
-          else downloadFile(file.path || file.name);
+          downloadFile(file.path || file.name);
         });
       }
       if (btnDel) {
@@ -1324,7 +1475,11 @@
 
       tr.addEventListener('click', (e) => {
         if (e.target.closest('.row-action-btn')) return;
-        openPreview(index);
+        if (isFolder) {
+          navigateFolder(file.path);
+        } else {
+          openPreview(index);
+        }
       });
       addSelection(tr.querySelector('td'), file, true);
       el.fileListBody.appendChild(tr);

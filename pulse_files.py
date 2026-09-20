@@ -98,7 +98,7 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
         query = request.args.get('q', '').casefold()
         kind = request.args.get('type', 'all')
         result = []
-        counts = dict(all=0, image=0, video=0, document=0, audio=0, other=0)
+        counts = dict(all=0, folder=0, image=0, video=0, document=0, audio=0, other=0)
         for p in folder.iterdir():
             if p.name.startswith('.') or p.is_symlink():
                 continue
@@ -108,8 +108,13 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
                 item = entry(p)
                 counts['all'] += 1
                 counts[item['type'] if item['type'] in counts else 'other'] += 1
-                match = kind == 'all' or item['type'] == kind or (kind == 'other' and item['type'] not in ('image', 'video', 'document', 'audio', 'folder'))
-                if (item['type'] == 'folder' or match) and query in p.name.casefold():
+                if kind == 'all':
+                    match = True
+                elif kind == 'other':
+                    match = item['type'] not in ('image', 'video', 'document', 'audio', 'folder')
+                else:
+                    match = item['type'] == kind
+                if match and query in p.name.casefold():
                     result.append(item)
             except OSError:
                 continue
