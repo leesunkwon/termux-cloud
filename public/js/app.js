@@ -1658,6 +1658,7 @@
     desktopInitialized = true;
 
     setupDesktopWindowControls();
+    setupContextMenu();
     setupTerminalLogic();
     setupFinderLogic();
     setupEditorLogic();
@@ -1721,6 +1722,263 @@
         aboutMem.textContent = state.dashboardData.memory.totalFormatted;
       }
     }
+  }
+
+  // Desktop OS Right-click Context Menu
+  function setupContextMenu() {
+    const ctxMenu = document.getElementById('desktop-context-menu');
+    const screen = document.getElementById('desktop-screen');
+    if (!ctxMenu || !screen) return;
+
+    function hideMenu() {
+      ctxMenu.classList.add('hidden');
+      ctxMenu.innerHTML = '';
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!ctxMenu.contains(e.target)) hideMenu();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') hideMenu();
+    });
+    window.addEventListener('blur', hideMenu);
+
+    function handleContextMenu(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+        hideMenu();
+        return;
+      }
+
+      const finderItem = e.target.closest('.finder-item');
+      const windowEl = e.target.closest('.desktop-window');
+      const dockEl = e.target.closest('.desktop-dock');
+      const menubarEl = e.target.closest('.desktop-menubar');
+
+      if (windowEl && !finderItem) {
+        hideMenu();
+        return;
+      }
+      if (dockEl || menubarEl) {
+        hideMenu();
+        return;
+      }
+
+      e.preventDefault();
+
+      if (finderItem) {
+        const path = finderItem.dataset.path;
+        const file = finderItem._file || state.files.find(f => f.path === path);
+        if (!file) { hideMenu(); return; }
+
+        const isDir = file.type === 'folder';
+        ctxMenu.innerHTML = `
+          <div class="ctx-item" data-action="open">
+            <span class="ctx-icon">${isDir ? '📂' : (file.isText ? '📝' : '👁️')}</span>
+            <span class="ctx-label">${isDir ? '열기' : (file.isText ? '에디터로 편집' : '미리보기')}</span>
+          </div>
+          ${!isDir ? `
+          <div class="ctx-item" data-action="download">
+            <span class="ctx-icon">⬇️</span>
+            <span class="ctx-label">다운로드</span>
+          </div>` : ''}
+          ${Pulse.isAdmin ? `
+          <div class="ctx-divider"></div>
+          <div class="ctx-item" data-action="rename">
+            <span class="ctx-icon">✏️</span>
+            <span class="ctx-label">이름 변경</span>
+            <span class="ctx-shortcut">Enter</span>
+          </div>
+          <div class="ctx-item ctx-danger" data-action="delete">
+            <span class="ctx-icon">🗑️</span>
+            <span class="ctx-label">휴지통으로 이동</span>
+          </div>` : ''}
+        `;
+
+        ctxMenu.querySelectorAll('.ctx-item').forEach(item => {
+          item.addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            hideMenu();
+            const action = item.getAttribute('data-action');
+            if (action === 'open') {
+              if (isDir) {
+                navigateFolder(file.path);
+              } else if (file.isText) {
+                openEditorWithFile(file.path || file.name);
+              } else {
+                state.previewableList = state.files;
+                const idx = state.files.findIndex(f => f.path === file.path);
+                if (idx !== -1) openPreview(idx);
+              }
+            } else if (action === 'download') {
+              const a = document.createElement('a');
+              a.href = `/api/download/${encodeURIComponent(file.path)}`;
+              a.download = file.name;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            } else if (action === 'rename') {
+              const newName = await Pulse.ask('새 이름 입력:', { input: true, value: file.name });
+              if (!newName || newName.trim() === file.name) return;
+              const cleanName = newName.trim();
+              if (cleanName.includes('/') || cleanName.includes('\\')) {
+                showToast('이름에 경로 구분자를 사용할 수 없습니다.');
+                return;
+              }
+              try {
+                await Pulse.post('/api/rename', { oldPath: file.path, newName: cleanName });
+                showToast(`'${cleanName}'(으)로 변경되었습니다.`);
+                await fetchFiles();
+                renderFinderFiles();
+              } catch (err) {
+                showToast('이름 변경 실패: ' + err.message);
+              }
+            } else if (action === 'delete') {
+              if (!await Pulse.ask(`'${file.name}' 항목을 휴지통으로 이동할까요?`, { confirm: '휴지통 이동' })) return;
+              try {
+                await Pulse.post('/api/batch/delete', { paths: [file.path] });
+                showToast(`'${file.name}'을(를) 휴지통으로 이동했습니다.`);
+                await fetchFiles();
+                renderFinderFiles();
+                fetchStorageStats();
+              } catch (err) {
+                showToast('삭제 실패: ' + err.message);
+              }
+            }
+          });
+        });
+      } else {
+        // Desktop wallpaper context menu
+        ctxMenu.innerHTML = `
+          ${Pulse.isAdmin ? `
+          <div class="ctx-item" data-action="new-file">
+            <span class="ctx-icon">📄</span>
+            <span class="ctx-label">새 텍스트 파일</span>
+          </div>
+          <div class="ctx-item" data-action="new-folder">
+            <span class="ctx-icon">📁</span>
+            <span class="ctx-label">새 폴더</span>
+          </div>
+          <div class="ctx-divider"></div>` : ''}
+          <div class="ctx-item" data-action="refresh">
+            <span class="ctx-icon">🔄</span>
+            <span class="ctx-label">바탕화면 새로고침</span>
+          </div>
+          <div class="ctx-item" data-action="theme">
+            <span class="ctx-icon">🎨</span>
+            <span class="ctx-label">배경화면 및 테마 설정</span>
+          </div>
+        `;
+
+        ctxMenu.querySelectorAll('.ctx-item').forEach(item => {
+          item.addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            hideMenu();
+            const action = item.getAttribute('data-action');
+            if (action === 'new-file') {
+              const name = await Pulse.ask('생성할 파일명 입력 (예: memo.txt):', { input: true, value: 'untitled.txt' });
+              if (!name || !name.trim()) return;
+              const cleanName = name.trim();
+              try {
+                const res = await fetch('/api/files/create', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ filename: joinPath(cleanName), content: '' })
+                });
+                const data = await res.json();
+                if (data.success) {
+                  showToast(`'${data.filename}' 파일이 생성되었습니다.`);
+                  await fetchFiles();
+                  renderFinderFiles();
+                  openEditorWithFile(data.filename);
+                } else {
+                  showToast('파일 생성 실패: ' + (data.error || '오류'));
+                }
+              } catch (err) {
+                showToast('파일 생성 통신 오류: ' + err.message);
+              }
+            } else if (action === 'new-folder') {
+              const name = await Pulse.ask('생성할 폴더명 입력:', { input: true, value: '새 폴더' });
+              if (!name || !name.trim()) return;
+              const cleanName = name.trim();
+              if (cleanName.includes('/') || cleanName.includes('\\')) {
+                showToast('폴더 이름에 경로 구분자를 사용할 수 없습니다.');
+                return;
+              }
+              try {
+                await Pulse.post('/api/folders', { path: joinPath(cleanName) });
+                showToast(`'${cleanName}' 폴더가 생성되었습니다.`);
+                await fetchFiles();
+                renderFinderFiles();
+              } catch (err) {
+                showToast('폴더 생성 실패: ' + err.message);
+              }
+            } else if (action === 'refresh') {
+              showToast('바탕화면 및 파일 상태를 새로고침했습니다.');
+              fetchFiles().then(() => renderFinderFiles());
+              fetchDashboardData(true).then(() => updateMonitorWidget());
+            } else if (action === 'theme') {
+              openDesktopWindow('settings');
+            }
+          });
+        });
+      }
+
+      ctxMenu.classList.remove('hidden');
+      const menuW = 200;
+      const menuH = 180;
+      let left = e.clientX;
+      let top = e.clientY;
+
+      if (left + menuW > window.innerWidth - 10) {
+        left = window.innerWidth - menuW - 10;
+      }
+      if (top + menuH > window.innerHeight - 10) {
+        top = window.innerHeight - menuH - 10;
+      }
+
+      ctxMenu.style.left = `${Math.max(10, left)}px`;
+      ctxMenu.style.top = `${Math.max(34, top)}px`;
+    }
+
+    screen.addEventListener('contextmenu', handleContextMenu);
+
+    // Touch long-press support
+    let touchTimer = null;
+    let touchMoved = false;
+    let touchStartPos = { x: 0, y: 0 };
+
+    screen.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      touchMoved = false;
+      const t = e.touches[0];
+      touchStartPos = { x: t.clientX, y: t.clientY };
+      clearTimeout(touchTimer);
+      touchTimer = setTimeout(() => {
+        if (!touchMoved) {
+          handleContextMenu({
+            preventDefault: () => {},
+            target: e.target,
+            clientX: touchStartPos.x,
+            clientY: touchStartPos.y
+          });
+        }
+      }, 550);
+    }, { passive: true });
+
+    screen.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 1) {
+        const dx = Math.abs(e.touches[0].clientX - touchStartPos.x);
+        const dy = Math.abs(e.touches[0].clientY - touchStartPos.y);
+        if (dx > 10 || dy > 10) {
+          touchMoved = true;
+          clearTimeout(touchTimer);
+        }
+      }
+    }, { passive: true });
+
+    screen.addEventListener('touchend', () => {
+      clearTimeout(touchTimer);
+    }, { passive: true });
   }
 
   // Window Management
@@ -1864,6 +2122,9 @@
       }, 100);
     } else if (appId === 'finder') {
       renderFinderFiles();
+    } else if (appId === 'editor') {
+      editorStats();
+      if (typeof updateEditorHighlight === 'function') updateEditorHighlight();
     } else if (appId === 'monitor') {
       updateMonitorWidget();
     } else if (appId === 'linux') {
@@ -1879,6 +2140,7 @@
       state.editorDirty = false;
       document.getElementById('editor-save-status').textContent = state.editorSavedPath ? '저장됨 ✓' : '새 문서';
       editorStats();
+      if (typeof updateEditorHighlight === 'function') updateEditorHighlight();
     }
     const win = document.getElementById('win-' + appId);
     if (!win) return;
@@ -1948,10 +2210,29 @@
     let isDragging = false;
     let startX = 0, startY = 0;
     let initialLeft = 0, initialTop = 0;
+    let currentSnapZone = null;
+    const snapPreview = document.getElementById('desktop-snap-preview');
+
+    function hideSnapPreview() {
+      if (snapPreview) {
+        snapPreview.className = 'desktop-snap-preview hidden';
+      }
+      currentSnapZone = null;
+    }
 
     function onStart(clientX, clientY) {
       if (window.innerWidth <= 768) return;
       if (win.classList.contains('window-maximized')) return;
+
+      if (win.dataset.snapped) {
+        try {
+          const pre = JSON.parse(win.dataset.preSnap || '{}');
+          if (pre.width) win.style.width = pre.width;
+          if (pre.height) win.style.height = pre.height;
+        } catch (e) {}
+        delete win.dataset.snapped;
+      }
+
       isDragging = true;
       bringWindowToFront(win.getAttribute('data-app'));
       startX = clientX;
@@ -1977,10 +2258,58 @@
       const newTop = Math.max(0, Math.min(initialTop + dy, maxTop));
       win.style.left = `${newLeft}px`;
       win.style.top = `${newTop}px`;
+
+      // Window Snap Detection
+      if (snapPreview && window.innerWidth > 768) {
+        const threshold = 24;
+        if (clientX <= threshold) {
+          if (currentSnapZone !== 'left') {
+            currentSnapZone = 'left';
+            snapPreview.className = 'desktop-snap-preview snap-left';
+          }
+        } else if (clientX >= window.innerWidth - threshold) {
+          if (currentSnapZone !== 'right') {
+            currentSnapZone = 'right';
+            snapPreview.className = 'desktop-snap-preview snap-right';
+          }
+        } else if (clientY <= 34) {
+          if (currentSnapZone !== 'top') {
+            currentSnapZone = 'top';
+            snapPreview.className = 'desktop-snap-preview snap-top';
+          }
+        } else {
+          hideSnapPreview();
+        }
+      }
     }
 
     function onEnd() {
+      if (!isDragging) return;
       isDragging = false;
+
+      if (currentSnapZone && window.innerWidth > 768) {
+        win.dataset.preSnap = JSON.stringify({
+          width: win.style.width || `${win.offsetWidth}px`,
+          height: win.style.height || `${win.offsetHeight}px`
+        });
+
+        if (currentSnapZone === 'left') {
+          win.style.left = '8px';
+          win.style.top = '38px';
+          win.style.width = 'calc(50% - 12px)';
+          win.style.height = 'calc(100% - 120px)';
+          win.dataset.snapped = 'left';
+        } else if (currentSnapZone === 'right') {
+          win.style.left = 'calc(50% + 4px)';
+          win.style.top = '38px';
+          win.style.width = 'calc(50% - 12px)';
+          win.style.height = 'calc(100% - 120px)';
+          win.dataset.snapped = 'right';
+        } else if (currentSnapZone === 'top') {
+          maximizeDesktopWindow(win.getAttribute('data-app'));
+        }
+      }
+      hideSnapPreview();
     }
 
     header.addEventListener('mousedown', (e) => {
@@ -2055,11 +2384,86 @@
     const output = document.getElementById('terminal-output');
     const promptEl = document.getElementById('terminal-prompt');
     const clearBtn = document.getElementById('btn-term-clear');
+    const copyBtn = document.getElementById('btn-term-copy');
 
     if (clearBtn) {
       clearBtn.addEventListener('click', () => {
         output.innerHTML = '';
       });
+    }
+
+    if (copyBtn) {
+      copyBtn.addEventListener('click', async () => {
+        const text = output.innerText || output.textContent;
+        if (!text || !text.trim()) {
+          showToast('복사할 터미널 출력이 없습니다.');
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(text);
+          showToast('터미널 출력이 클립보드에 복사되었습니다.');
+        } catch (err) {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          showToast('터미널 출력이 복사되었습니다.');
+        }
+      });
+    }
+
+    function parseAnsiToHtml(raw) {
+      if (!raw) return '';
+      const ansiRegex = /(?:\x1b|\u001b)\[([0-9;]*)m/g;
+      let html = '';
+      let lastIndex = 0;
+      const currentClasses = new Set();
+
+      let match;
+      while ((match = ansiRegex.exec(raw)) !== null) {
+        const textChunk = raw.slice(lastIndex, match.index);
+        if (textChunk) {
+          if (currentClasses.size > 0) {
+            html += `<span class="${Array.from(currentClasses).join(' ')}">${escapeHtml(textChunk)}</span>`;
+          } else {
+            html += escapeHtml(textChunk);
+          }
+        }
+
+        const codes = match[1] ? match[1].split(';').map(c => parseInt(c, 10)) : [0];
+        for (const code of codes) {
+          if (code === 0 || isNaN(code)) {
+            currentClasses.clear();
+          } else if (code === 1) {
+            currentClasses.add('ansi-bold');
+          } else if (code === 4) {
+            currentClasses.add('ansi-underline');
+          } else if (code >= 30 && code <= 37) {
+            currentClasses.forEach(c => { if (/^ansi-\d+$/.test(c)) currentClasses.delete(c); });
+            currentClasses.add(`ansi-${code - 30}`);
+          } else if (code >= 90 && code <= 97) {
+            currentClasses.forEach(c => { if (/^ansi-\d+$/.test(c)) currentClasses.delete(c); });
+            currentClasses.add(`ansi-${code - 90 + 8}`);
+          } else if (code === 39) {
+            currentClasses.forEach(c => { if (/^ansi-\d+$/.test(c)) currentClasses.delete(c); });
+          }
+        }
+
+        lastIndex = ansiRegex.lastIndex;
+      }
+
+      const remaining = raw.slice(lastIndex);
+      if (remaining) {
+        if (currentClasses.size > 0) {
+          html += `<span class="${Array.from(currentClasses).join(' ')}">${escapeHtml(remaining)}</span>`;
+        } else {
+          html += escapeHtml(remaining);
+        }
+      }
+
+      return html;
     }
 
     document.querySelectorAll('.preset-cmd-btn').forEach(btn => {
@@ -2115,10 +2519,11 @@
       if (cmd === 'help') {
         const helpLine = document.createElement('div');
         helpLine.className = 'term-line term-info';
-        helpLine.textContent = `[Pulse 터미널 도움말]
+        helpLine.innerHTML = parseAnsiToHtml(`\x1b[1;34m[Pulse 터미널 도움말]\x1b[0m
 - Pulse 서버가 실행 중인 기기의 쉘 명령을 수행합니다 (예: ls, pwd, df -h, python3, git 등).
 - 'cd <dir>'로 작업 디렉토리를 자유롭게 이동할 수 있습니다.
-- 상단의 자주 쓰는 명령어 버튼을 누르면 즉시 실행됩니다.`;
+- 상단의 자주 쓰는 명령어 버튼을 누르면 즉시 실행됩니다.
+- 상단 '\x1b[1m출력 복사\x1b[0m' 버튼으로 터미널 기록을 간편하게 클립보드에 복사할 수 있습니다.`);
         output.appendChild(helpLine);
         output.scrollTop = output.scrollHeight;
         return;
@@ -2132,7 +2537,7 @@
       const status = document.getElementById('terminal-status');
       status.textContent = '실행 중 · 최대 15초';
       status.dataset.busy = 'true';
-      const controls = document.querySelectorAll('#terminal-form button, .preset-cmd-btn, #btn-term-clear');
+      const controls = document.querySelectorAll('#terminal-form button, .preset-cmd-btn, #btn-term-clear, #btn-term-copy');
       controls.forEach(button => { button.disabled = true; });
       try {
         const res = await fetch('/api/terminal/exec', {
@@ -2149,7 +2554,8 @@
         }
         const outLine = document.createElement('div');
         outLine.className = `term-line ${data.exitCode === 0 ? 'term-success' : 'term-err'}`;
-        outLine.textContent = data.output || data.error || (data.exitCode === 0 ? '(성공 - 반환값 없음)' : `종료 코드: ${data.exitCode}`);
+        const rawContent = data.output || data.error || (data.exitCode === 0 ? '(성공 - 반환값 없음)' : `종료 코드: ${data.exitCode}`);
+        outLine.innerHTML = parseAnsiToHtml(rawContent);
         output.appendChild(outLine);
       } catch (err) {
         const errLine = document.createElement('div');
@@ -2169,11 +2575,32 @@
   // [App 2: Finder]
   function setupFinderLogic() {
     const newFileBtn = document.getElementById('btn-finder-new-file');
+    const newFolderBtn = document.getElementById('btn-finder-new-folder');
     const refreshBtn = document.getElementById('btn-finder-refresh');
 
     if (refreshBtn) {
       refreshBtn.addEventListener('click', () => {
         fetchFiles().then(() => renderFinderFiles());
+      });
+    }
+
+    if (newFolderBtn) {
+      newFolderBtn.addEventListener('click', async () => {
+        const name = await Pulse.ask('생성할 폴더명을 입력하세요:', { input: true, value: '새 폴더' });
+        if (!name || !name.trim()) return;
+        const cleanName = name.trim();
+        if (cleanName.includes('/') || cleanName.includes('\\')) {
+          showToast('폴더 이름에 경로 구분자를 사용할 수 없습니다.');
+          return;
+        }
+        try {
+          await Pulse.post('/api/folders', { path: joinPath(cleanName) });
+          showToast(`'${cleanName}' 폴더가 생성되었습니다.`);
+          await fetchFiles();
+          renderFinderFiles();
+        } catch (err) {
+          showToast('폴더 생성 실패: ' + err.message);
+        }
       });
     }
 
@@ -2243,6 +2670,8 @@
     list.forEach(file => {
       const item = document.createElement('div');
       item.className = 'finder-item';
+      item.dataset.path = file.path;
+      item._file = file;
       item.innerHTML = `
         <div class="finder-item-icon">${getFileEmoji(file)}</div>
         <div class="finder-item-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
@@ -2269,11 +2698,122 @@
     return !state.editorDirty || Boolean(await Pulse.ask('저장하지 않은 변경 내용이 있습니다. 변경 내용을 버리고 계속할까요?', { confirm: '변경 버리기' }));
   }
 
+  const GRAMMARS = {
+    js: /(\/\*[\s\S]*?\*\/|\/\/.*)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^\`\\])*`)|(\b(?:const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|try|catch|finally|throw|new|class|extends|super|this|import|export|from|as|default|await|async|yield|typeof|instanceof|void|delete|in|of)\b)|(\b(?:true|false|null|undefined|NaN)\b)|(\b\d+(?:\.\d+)?\b)|(\b[a-zA-Z_$][a-zA-Z0-9_$]*(?=\s*\())/g,
+    py: /(#.*)|("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b(?:def|class|return|if|elif|else|for|while|try|except|finally|raise|import|from|as|with|pass|break|continue|global|nonlocal|lambda|yield|async|await|and|or|not|is|in)\b)|(\b(?:True|False|None|self|cls|int|str|float|bool|list|dict|set|tuple)\b)|(\b\d+(?:\.\d+)?\b)|(\b[a-zA-Z_]\w*(?=\s*\())|(@\w+)/g,
+    sh: /(#.*)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b(?:if|then|else|elif|fi|case|esac|for|while|until|do|done|in|function|select|time)\b)|(\$[a-zA-Z_0-9]+|\$\{[^}]+\})|(\b(?:echo|cd|ls|mkdir|rm|cp|mv|cat|grep|chmod|chown|sudo|curl|wget|git|apt|pkg|export)\b)|(\b\d+\b)/g,
+    json: /("(?:\\.|[^"\\])*"(?=\s*:))|("(?:\\.|[^"\\])*")|(\b(?:true|false|null)\b)|(-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)/g,
+    html: /(<!--[\s\S]*?-->)|(<!DOCTYPE[^>]*>|<\/?[a-zA-Z0-9\-]+)|(\b[a-zA-Z\-]+(?=\s*=))|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(&[a-zA-Z0-9#]+;)/g,
+    css: /(\/\*[\s\S]*?\*\/)|([.#][a-zA-Z0-9_\-]+)|(\b[a-zA-Z\-]+(?=\s*:))|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(#[0-9a-fA-F]{3,8}\b|\b\d+(?:px|em|rem|%|vh|vw|s|ms)?\b)/g
+  };
+
+  function getEditorLanguage(filename) {
+    if (!filename) return 'txt';
+    const ext = filename.split('.').pop().toLowerCase();
+    if (['js', 'mjs', 'jsx', 'ts', 'tsx'].includes(ext)) return 'js';
+    if (['py', 'pyw'].includes(ext)) return 'py';
+    if (['html', 'htm', 'xml', 'svg'].includes(ext)) return 'html';
+    if (['css', 'scss', 'less'].includes(ext)) return 'css';
+    if (['json'].includes(ext)) return 'json';
+    if (['sh', 'bash', 'zsh'].includes(ext)) return 'sh';
+    return 'txt';
+  }
+
+  function getMatchClass(match, lang) {
+    if (lang === 'js') {
+      if (match[1]) return 'tok-com';
+      if (match[2]) return 'tok-str';
+      if (match[3]) return 'tok-kw';
+      if (match[4]) return 'tok-type';
+      if (match[5]) return 'tok-num';
+      if (match[6]) return 'tok-fn';
+    } else if (lang === 'py') {
+      if (match[1]) return 'tok-com';
+      if (match[2]) return 'tok-str';
+      if (match[3]) return 'tok-kw';
+      if (match[4]) return 'tok-type';
+      if (match[5]) return 'tok-num';
+      if (match[6]) return 'tok-fn';
+      if (match[7]) return 'tok-attr';
+    } else if (lang === 'sh') {
+      if (match[1]) return 'tok-com';
+      if (match[2]) return 'tok-str';
+      if (match[3]) return 'tok-kw';
+      if (match[4]) return 'tok-attr';
+      if (match[5]) return 'tok-fn';
+      if (match[6]) return 'tok-num';
+    } else if (lang === 'json') {
+      if (match[1]) return 'tok-attr';
+      if (match[2]) return 'tok-str';
+      if (match[3]) return 'tok-kw';
+      if (match[4]) return 'tok-num';
+    } else if (lang === 'html') {
+      if (match[1]) return 'tok-com';
+      if (match[2]) return 'tok-tag';
+      if (match[3]) return 'tok-attr';
+      if (match[4]) return 'tok-str';
+      if (match[5]) return 'tok-type';
+    } else if (lang === 'css') {
+      if (match[1]) return 'tok-com';
+      if (match[2]) return 'tok-attr';
+      if (match[3]) return 'tok-type';
+      if (match[4]) return 'tok-str';
+      if (match[5]) return 'tok-num';
+    }
+    return '';
+  }
+
+  function highlightCode(rawText, lang) {
+    if (!rawText) return '';
+    const regex = GRAMMARS[lang];
+    if (!regex) return escapeHtml(rawText);
+
+    let lastIndex = 0;
+    let html = '';
+    regex.lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(rawText)) !== null) {
+      if (match.index > lastIndex) {
+        html += escapeHtml(rawText.slice(lastIndex, match.index));
+      }
+      const cls = getMatchClass(match, lang);
+      if (cls) {
+        html += `<span class="${cls}">${escapeHtml(match[0])}</span>`;
+      } else {
+        html += escapeHtml(match[0]);
+      }
+      lastIndex = regex.lastIndex;
+      if (!match[0].length) { regex.lastIndex++; }
+    }
+    if (lastIndex < rawText.length) {
+      html += escapeHtml(rawText.slice(lastIndex));
+    }
+    return html;
+  }
+
+  function updateEditorHighlight() {
+    const textarea = document.getElementById('editor-textarea');
+    const highlightCodeEl = document.getElementById('editor-highlight-code');
+    const filenameEl = document.getElementById('editor-filename-input');
+    if (!textarea || !highlightCodeEl) return;
+    const filename = filenameEl ? filenameEl.value.trim() : '';
+    const lang = getEditorLanguage(filename);
+    const code = textarea.value;
+    highlightCodeEl.innerHTML = highlightCode(code, lang) + (code.endsWith('\n') ? ' ' : '');
+  }
+
   function editorStats() {
-    const text = document.getElementById('editor-textarea').value;
+    const textarea = document.getElementById('editor-textarea');
+    if (!textarea) return;
+    const text = textarea.value;
     const lines = text.split('\n').length;
-    document.getElementById('editor-stats-badge').textContent = `${lines}줄 | ${text.length}자`;
-    document.getElementById('editor-gutter').textContent = Array.from({ length: Math.min(lines, 10000) }, (_, i) => i + 1).join('\n');
+    const statsBadge = document.getElementById('editor-stats-badge');
+    if (statsBadge) statsBadge.textContent = `${lines}줄 | ${text.length}자`;
+    const gutter = document.getElementById('editor-gutter');
+    if (gutter) {
+      gutter.textContent = Array.from({ length: Math.min(lines, 10000) }, (_, i) => i + 1).join('\n');
+    }
   }
   function editorBusy(busy) {
     state.editorBusy = busy;
@@ -2284,15 +2824,28 @@
   function setupEditorLogic() {
     const textarea = document.getElementById('editor-textarea');
     const filename = document.getElementById('editor-filename-input');
+    const highlight = document.getElementById('editor-highlight');
+    const gutter = document.getElementById('editor-gutter');
+
     const dirty = () => {
       state.editorDirty = true;
       document.getElementById('editor-save-status').textContent = '저장 안 됨';
       document.getElementById('editor-save-status').classList.remove('green');
       editorStats();
+      updateEditorHighlight();
     };
     textarea.addEventListener('input', dirty);
-    filename.addEventListener('input', dirty);
-    textarea.addEventListener('scroll', () => { document.getElementById('editor-gutter').scrollTop = textarea.scrollTop; });
+    filename.addEventListener('input', () => {
+      dirty();
+      updateEditorHighlight();
+    });
+    textarea.addEventListener('scroll', () => {
+      if (gutter) gutter.scrollTop = textarea.scrollTop;
+      if (highlight) {
+        highlight.scrollTop = textarea.scrollTop;
+        highlight.scrollLeft = textarea.scrollLeft;
+      }
+    });
     textarea.addEventListener('keydown', event => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault(); saveEditorContent();
@@ -2350,6 +2903,7 @@
       state.editorSavedText = content;
       state.editorSavedPath = filename;
       editorStats();
+      updateEditorHighlight();
       status.textContent = Pulse.isAdmin ? '저장됨 ✓' : '읽기 전용';
       status.classList.add('green');
       openDesktopWindow('editor');

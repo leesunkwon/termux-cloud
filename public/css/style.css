@@ -3458,6 +3458,26 @@ body {
 .term-err { color: #f7768e; }
 .term-success { color: #9ece6a; }
 
+/* Terminal ANSI Color Palette */
+.ansi-0 { color: #1e1e2e; }
+.ansi-1 { color: #f38ba8; }
+.ansi-2 { color: #a6e3a1; }
+.ansi-3 { color: #f9e2af; }
+.ansi-4 { color: #89b4fa; }
+.ansi-5 { color: #cba6f7; }
+.ansi-6 { color: #89dceb; }
+.ansi-7 { color: #cdd6f4; }
+.ansi-8 { color: #585b70; }
+.ansi-9 { color: #eba0ac; }
+.ansi-10 { color: #94e2d5; }
+.ansi-11 { color: #f9e2af; }
+.ansi-12 { color: #74c7ec; }
+.ansi-13 { color: #f5c2e7; }
+.ansi-14 { color: #94e2d5; }
+.ansi-15 { color: #ffffff; }
+.ansi-bold { font-weight: bold; }
+.ansi-underline { text-decoration: underline; }
+
 .terminal-input-row {
   display: flex;
   align-items: center;
@@ -3635,34 +3655,94 @@ body {
 }
 
 .editor-gutter {
-  width: 42px;
+  width: 46px;
+  min-width: 46px;
   background: #11111b;
-  color: #6c7086;
+  color: #585b70;
   font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
   font-size: 12.5px;
   line-height: 1.5;
-  padding: 10px 4px;
+  padding: 10px 6px 10px 4px;
   text-align: right;
   user-select: none;
   overflow: hidden;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.editor-textarea {
+.editor-code-wrap {
   flex: 1;
+  position: relative;
+  overflow: hidden;
   background: #1e1e2e;
-  border: none;
-  color: #cdd6f4;
+}
+
+.editor-highlight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 10px;
+  box-sizing: border-box;
   font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
   font-size: 12.5px;
   line-height: 1.5;
+  white-space: pre;
+  tab-size: 4;
+  pointer-events: none;
+  overflow: hidden;
+  color: #cdd6f4;
+  z-index: 1;
+}
+
+.editor-highlight code {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre;
+  tab-size: inherit;
+}
+
+.editor-textarea {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
   padding: 10px;
+  box-sizing: border-box;
+  background: transparent;
+  color: transparent;
+  caret-color: #cdd6f4;
+  border: none;
+  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
   outline: none;
   resize: none;
   tab-size: 4;
   white-space: pre;
-  overflow-x: auto;
+  overflow: auto;
   user-select: text;
+  z-index: 2;
 }
+
+.editor-textarea::selection {
+  background: rgba(137, 180, 250, 0.35);
+}
+
+/* Code Syntax Tokens */
+.tok-kw { color: #cba6f7; font-weight: 600; }
+.tok-str { color: #a6e3a1; }
+.tok-num { color: #fab387; }
+.tok-fn { color: #89b4fa; }
+.tok-com { color: #6c7086; font-style: italic; }
+.tok-tag { color: #f38ba8; font-weight: 600; }
+.tok-type { color: #f9e2af; }
+.tok-op { color: #89dceb; }
+.tok-attr { color: #89b4fa; }
 
 /* [앱 4: 활동 모니터] */
 .monitor-body {
@@ -4157,6 +4237,130 @@ body {
   }
 }
 
+/* ================= Desktop Context Menu ================= */
+.desktop-context-menu {
+  position: absolute;
+  z-index: 9999;
+  min-width: 190px;
+  background: rgba(246, 246, 246, 0.88);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 0.5px solid rgba(0, 0, 0, 0.14);
+  border-radius: 8px;
+  padding: 5px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.22), 0 0 0 0.5px rgba(255, 255, 255, 0.6) inset;
+  user-select: none;
+  animation: ctxMenuIn 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top left;
+}
+
+@keyframes ctxMenuIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.desktop-screen.theme-sequoia .desktop-context-menu,
+.desktop-screen.theme-cyber .desktop-context-menu,
+.desktop-screen.theme-midnight .desktop-context-menu {
+  background: rgba(30, 30, 38, 0.9);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #f5f5f7;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(255, 255, 255, 0.1) inset;
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: background 0.08s, color 0.08s;
+}
+
+.desktop-screen.theme-sequoia .ctx-item,
+.desktop-screen.theme-cyber .ctx-item,
+.desktop-screen.theme-midnight .ctx-item {
+  color: #e2e8f0;
+}
+
+.ctx-item:hover {
+  background: var(--apple-blue);
+  color: #ffffff !important;
+}
+
+.ctx-item.ctx-danger:hover {
+  background: #ff3b30;
+  color: #ffffff !important;
+}
+
+.ctx-icon {
+  width: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.ctx-label {
+  flex: 1;
+}
+
+.ctx-shortcut {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-left: 8px;
+}
+
+.ctx-divider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.08);
+  margin: 4px 2px;
+}
+
+.desktop-screen.theme-sequoia .ctx-divider,
+.desktop-screen.theme-cyber .ctx-divider,
+.desktop-screen.theme-midnight .ctx-divider {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ================= Window Snap Preview & Tiling ================= */
+.desktop-snap-preview {
+  position: absolute;
+  border-radius: 12px;
+  background: rgba(0, 113, 227, 0.2);
+  border: 1.5px solid rgba(0, 113, 227, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 999;
+  pointer-events: none;
+  transition: all 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.desktop-snap-preview.snap-left {
+  top: 38px;
+  left: 8px;
+  width: calc(50% - 12px);
+  height: calc(100% - 120px);
+}
+
+.desktop-snap-preview.snap-right {
+  top: 38px;
+  left: calc(50% + 4px);
+  width: calc(50% - 12px);
+  height: calc(100% - 120px);
+}
+
+.desktop-snap-preview.snap-top {
+  top: 38px;
+  left: 8px;
+  width: calc(100% - 16px);
+  height: calc(100% - 120px);
+}
 
 /* Pulse 1.5: account UI, shared dialogs and compact mobile desktop. */
 .pulse-account-bar { display:flex; justify-content:flex-end; align-items:center; gap:12px; padding:6px 18px; background:#f5f6fa; font-size:12px; }
@@ -4338,7 +4542,7 @@ button:disabled {
   .terminal-presets button { flex-shrink:0; }
   .terminal-input { min-width:0; font-size:16px; }
   .terminal-prompt { max-width:30%; overflow:hidden; text-overflow:ellipsis; }
-  .editor-textarea { font-size:16px; }
+  .editor-textarea, .editor-highlight, .editor-gutter { font-size:14px; }
   .pulse-account-bar { padding:4px 12px; }
   .pulse-file-tools { gap:6px; }
 }
