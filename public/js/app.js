@@ -1821,6 +1821,15 @@
     setupLinuxVncLogic();
     setupWallpaperTheme();
 
+    setupSpotlightLogic();
+    setupQuickLookLogic();
+    setupMissionControlLogic();
+    setupDesktopIconsAndMarquee();
+    setupControlCenterLogic();
+    setupStickiesLogic();
+    setupMusicPlayerLogic();
+    setupDockMagnificationAndMotion();
+
     // Start Desktop Clock
     updateDesktopClock();
     if (!desktopClockTimer) {
@@ -1932,6 +1941,11 @@
             <span class="ctx-label">${isDir ? '열기' : (file.isText ? '에디터로 편집' : '미리보기')}</span>
           </div>
           ${!isDir ? `
+          <div class="ctx-item" data-action="quicklook">
+            <span class="ctx-icon">👁️</span>
+            <span class="ctx-label">빠른 미리보기</span>
+            <span class="ctx-shortcut">Space</span>
+          </div>
           <div class="ctx-item" data-action="download">
             <span class="ctx-icon">⬇️</span>
             <span class="ctx-label">다운로드</span>
@@ -1964,6 +1978,8 @@
                 const idx = state.files.findIndex(f => f.path === file.path);
                 if (idx !== -1) openPreview(idx);
               }
+            } else if (action === 'quicklook') {
+              openQuickLook(file, state.files);
             } else if (action === 'download') {
               const a = document.createElement('a');
               a.href = `/api/download/${encodeURIComponent(file.path)}`;
@@ -2014,6 +2030,25 @@
             <span class="ctx-label">새 폴더</span>
           </div>
           <div class="ctx-divider"></div>` : ''}
+          <div class="ctx-item" data-action="spotlight">
+            <span class="ctx-icon">🔍</span>
+            <span class="ctx-label">Spotlight 검색</span>
+            <span class="ctx-shortcut">Ctrl+Space</span>
+          </div>
+          <div class="ctx-item" data-action="mission">
+            <span class="ctx-icon">🪟</span>
+            <span class="ctx-label">미션 컨트롤</span>
+            <span class="ctx-shortcut">F3</span>
+          </div>
+          <div class="ctx-item" data-action="stickies">
+            <span class="ctx-icon">📌</span>
+            <span class="ctx-label">스티커 메모 열기</span>
+          </div>
+          <div class="ctx-item" data-action="music">
+            <span class="ctx-icon">🎵</span>
+            <span class="ctx-label">Pulse 음악 열기</span>
+          </div>
+          <div class="ctx-divider"></div>
           <div class="ctx-item" data-action="refresh">
             <span class="ctx-icon">🔄</span>
             <span class="ctx-label">바탕화면 새로고침</span>
@@ -2067,6 +2102,14 @@
               } catch (err) {
                 showToast('폴더 생성 실패: ' + err.message);
               }
+            } else if (action === 'spotlight') {
+              document.getElementById('btn-desktop-spotlight')?.click();
+            } else if (action === 'mission') {
+              toggleMissionControl();
+            } else if (action === 'stickies') {
+              openDesktopWindow('stickies');
+            } else if (action === 'music') {
+              openDesktopWindow('music');
             } else if (action === 'refresh') {
               showToast('바탕화면 및 파일 상태를 새로고침했습니다.');
               fetchFiles().then(() => renderFinderFiles());
@@ -2263,6 +2306,8 @@
         else if (appId === 'linux') { win.style.width = '720px'; win.style.height = '480px'; }
         else if (appId === 'settings') { win.style.width = '520px'; win.style.height = '380px'; }
         else if (appId === 'about') { win.style.width = '380px'; win.style.height = '340px'; }
+        else if (appId === 'stickies') { win.style.width = '320px'; win.style.height = '260px'; }
+        else if (appId === 'music') { win.style.width = '440px'; win.style.height = '480px'; }
       }
       win.dataset.positioned = 'true';
     }
@@ -2284,6 +2329,11 @@
       updateMonitorWidget();
     } else if (appId === 'linux') {
       checkVncStatus();
+    } else if (appId === 'stickies') {
+      const ta = document.getElementById('sticky-textarea');
+      if (ta) ta.focus();
+    } else if (appId === 'music') {
+      if (typeof loadMusicPlaylist === 'function') loadMusicPlaylist();
     }
   }
 
@@ -2296,6 +2346,16 @@
       document.getElementById('editor-save-status').textContent = state.editorSavedPath ? '저장됨 ✓' : '새 문서';
       editorStats();
       if (typeof updateEditorHighlight === 'function') updateEditorHighlight();
+    }
+    if (appId === 'music') {
+      const audio = document.getElementById('pulse-bg-audio');
+      if (audio) {
+        audio.pause();
+        const vinyl = document.getElementById('music-vinyl');
+        if (vinyl) vinyl.classList.remove('playing');
+        const playBtn = document.getElementById('btn-music-play');
+        if (playBtn) playBtn.textContent = '▶';
+      }
     }
     const win = document.getElementById('win-' + appId);
     if (!win) return;
@@ -2320,10 +2380,14 @@
   function minimizeDesktopWindow(appId) {
     const win = document.getElementById('win-' + appId);
     if (!win) return;
-    win.classList.add('window-minimized');
-    document.querySelectorAll('.dock-item').forEach(item => item.classList.remove('active'));
-    const title = document.getElementById('desktop-active-app-name');
-    if (title) title.textContent = 'Pulse OS';
+    win.classList.add('window-minimizing');
+    setTimeout(() => {
+      win.classList.remove('window-minimizing');
+      win.classList.add('window-minimized');
+      document.querySelectorAll('.dock-item').forEach(item => item.classList.remove('active'));
+      const title = document.getElementById('desktop-active-app-name');
+      if (title) title.textContent = 'Pulse OS';
+    }, 220);
   }
 
   function maximizeDesktopWindow(appId) {
@@ -2351,6 +2415,8 @@
       monitor: 'Pulse 모니터',
       browser: 'Pulse 브라우저',
       linux: 'Linux 데스크톱',
+      stickies: '스티커 메모',
+      music: 'Pulse 음악',
       settings: 'Pulse OS 설정',
       about: 'Pulse OS 정보'
     };
@@ -3227,6 +3293,1029 @@
       document.querySelectorAll('.wp-option').forEach(b => b.classList.remove('active'));
       activeBtn.classList.add('active');
     }
+  }
+
+  // ==========================================================================
+  // 🖥️ Pulse OS 8대 핵심 기능 고도화 구현 (v2.0.0)
+  // ==========================================================================
+
+  // 1. Spotlight 전역 검색 & 런처 (Cmd/Ctrl + Space)
+  function setupSpotlightLogic() {
+    const spotlightEl = document.getElementById('desktop-spotlight');
+    const inputEl = document.getElementById('spotlight-input');
+    const resultsEl = document.getElementById('spotlight-results');
+    const closeBtn = document.getElementById('spotlight-close-btn');
+    const openBtn = document.getElementById('btn-desktop-spotlight');
+
+    if (!spotlightEl || !inputEl || !resultsEl) return;
+
+    let selectedIdx = 0;
+    let currentItems = [];
+
+    function openSpotlight() {
+      spotlightEl.classList.remove('hidden');
+      inputEl.value = '';
+      selectedIdx = 0;
+      renderSpotlightResults('');
+      setTimeout(() => inputEl.focus(), 60);
+    }
+
+    function closeSpotlight() {
+      spotlightEl.classList.add('hidden');
+    }
+
+    if (openBtn) openBtn.addEventListener('click', openSpotlight);
+    if (closeBtn) closeBtn.addEventListener('click', closeSpotlight);
+
+    spotlightEl.addEventListener('click', (e) => {
+      if (e.target === spotlightEl) closeSpotlight();
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (state.currentAppView !== 'desktop') return;
+      if ((e.ctrlKey || e.metaKey) && e.code === 'Space') {
+        e.preventDefault();
+        if (spotlightEl.classList.contains('hidden')) openSpotlight();
+        else closeSpotlight();
+      }
+    });
+
+    inputEl.addEventListener('input', (e) => {
+      selectedIdx = 0;
+      renderSpotlightResults(e.target.value.trim());
+    });
+
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeSpotlight();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (currentItems.length > 0) {
+          selectedIdx = (selectedIdx + 1) % currentItems.length;
+          updateHighlight();
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (currentItems.length > 0) {
+          selectedIdx = (selectedIdx - 1 + currentItems.length) % currentItems.length;
+          updateHighlight();
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentItems.length > 0 && currentItems[selectedIdx]) {
+          executeSpotlightItem(currentItems[selectedIdx]);
+        }
+      }
+    });
+
+    function updateHighlight() {
+      const itemEls = resultsEl.querySelectorAll('.spotlight-item');
+      itemEls.forEach((itemNode, i) => {
+        itemNode.classList.toggle('active', i === selectedIdx);
+        if (i === selectedIdx) itemNode.scrollIntoView({ block: 'nearest' });
+      });
+    }
+
+    function executeSpotlightItem(item) {
+      closeSpotlight();
+      if (item.action) item.action();
+    }
+
+    function tryEvaluateMath(expr) {
+      if (!expr || expr.length < 2) return null;
+      const sanitized = expr.replace(/\^/g, '**').replace(/×/g, '*').replace(/÷/g, '/');
+      if (!/^[0-9\s\+\-\*\/\%\(\)\.\*\*]+$/.test(sanitized)) return null;
+      if (!/[\+\-\*\/\%]/.test(sanitized)) return null;
+      try {
+        const res = Function(`"use strict"; return (${sanitized});`)();
+        if (typeof res === 'number' && !isNaN(res) && isFinite(res)) {
+          return res;
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    function renderSpotlightResults(query) {
+      resultsEl.innerHTML = '';
+      currentItems = [];
+
+      // Check math calculation
+      const mathResult = tryEvaluateMath(query);
+      if (mathResult !== null) {
+        const formattedResult = Number(mathResult.toFixed(6)).toLocaleString();
+        const calcCard = document.createElement('div');
+        calcCard.className = 'spotlight-calc-card';
+        calcCard.innerHTML = `
+          <div class="spotlight-calc-expr">${escapeHtml(query)} =</div>
+          <div class="spotlight-calc-result">${formattedResult}</div>
+        `;
+        resultsEl.appendChild(calcCard);
+
+        currentItems.push({
+          type: 'calc',
+          action: () => {
+            navigator.clipboard?.writeText(String(mathResult));
+            showToast(`계산 결과(${formattedResult})가 클립보드에 복사되었습니다.`);
+          }
+        });
+      }
+
+      // App list
+      const allApps = [
+        { id: 'finder', name: 'Pulse 파일', en: 'finder files', icon: '📁', desc: '파일 및 폴더 탐색기' },
+        { id: 'terminal', name: 'Pulse 터미널', en: 'terminal bash shell cli', icon: '💻', desc: 'Linux 셸 명령 실행기', admin: true },
+        { id: 'editor', name: 'Pulse 에디터', en: 'editor code text notepad', icon: '📝', desc: '코드 및 텍스트 편집기' },
+        { id: 'stickies', name: '스티커 메모', en: 'stickies memo notes postit', icon: '📌', desc: '바탕화면 포스트잇 메모' },
+        { id: 'music', name: 'Pulse 음악', en: 'music audio player mp3', icon: '🎵', desc: '보관함 미디어 플레이어' },
+        { id: 'monitor', name: 'Pulse 모니터', en: 'monitor activity resource cpu ram', icon: '📊', desc: '시스템 리소스 실시간 모니터' },
+        { id: 'browser', name: 'Pulse 브라우저', en: 'browser web net', icon: '🌐', desc: '웹 사이트 브라우저' },
+        { id: 'linux', name: 'Linux 데스크톱', en: 'linux vnc gui xfce desktop', icon: '🐧', desc: 'Termux XFCE4 GUI', admin: true },
+        { id: 'settings', name: 'Pulse OS 설정', en: 'settings wallpaper preferences theme', icon: '⚙️', desc: '배경화면 및 환경설정' },
+        { id: 'about', name: 'Pulse OS 정보', en: 'about system pulse info', icon: '⚡', desc: 'Pulse OS 시스템 사양 및 버전' }
+      ];
+
+      const qLower = query.toLowerCase();
+
+      // Matched Apps
+      const matchedApps = allApps.filter(app => {
+        if (app.admin && !Pulse.isAdmin) return false;
+        if (!query) return true;
+        return app.name.toLowerCase().includes(qLower) || app.en.includes(qLower) || app.id.includes(qLower);
+      });
+
+      if (matchedApps.length > 0) {
+        const sec = document.createElement('div');
+        sec.className = 'spotlight-section-title';
+        sec.textContent = '애플리케이션';
+        resultsEl.appendChild(sec);
+
+        matchedApps.forEach(app => {
+          const item = {
+            type: 'app',
+            action: () => openDesktopWindow(app.id)
+          };
+          currentItems.push(item);
+          const itemIdx = currentItems.length - 1;
+
+          const itemNode = document.createElement('div');
+          itemNode.className = `spotlight-item ${itemIdx === selectedIdx ? 'active' : ''}`;
+          itemNode.innerHTML = `
+            <span class="spotlight-item-icon">${app.icon}</span>
+            <div class="spotlight-item-main">
+              <div class="spotlight-item-title">${app.name}</div>
+              <div class="spotlight-item-sub">${app.desc}</div>
+            </div>
+          `;
+          itemNode.addEventListener('click', () => executeSpotlightItem(item));
+          resultsEl.appendChild(itemNode);
+        });
+      }
+
+      // Matched System Actions
+      const actions = [
+        { name: '테마 전환 (테마 순환)', icon: '🌓', match: ['테마', 'theme', '다크', 'dark', '라이트', 'light'], action: () => toggleTheme() },
+        { name: '미션 컨트롤 (모든 창 보기)', icon: '🪟', match: ['미션', 'mission', '창', 'windows', 'expose'], action: () => toggleMissionControl() },
+        { name: '제어 센터 열기', icon: '🎛️', match: ['제어', 'control', '설정', '와이파이', 'ip'], action: () => toggleControlCenter() },
+        { name: '화면 새로고침', icon: '🔄', match: ['새로고침', 'refresh', 'reload'], action: () => location.reload() },
+        { name: '전체화면 토글', icon: '⛶', match: ['전체화면', 'fullscreen', 'full'], action: () => document.getElementById('btn-desktop-fullscreen')?.click() }
+      ];
+
+      const matchedActions = actions.filter(act => {
+        if (!query) return false;
+        return act.name.toLowerCase().includes(qLower) || act.match.some(m => m.includes(qLower));
+      });
+
+      if (matchedActions.length > 0) {
+        const sec = document.createElement('div');
+        sec.className = 'spotlight-section-title';
+        sec.textContent = '시스템 동작';
+        resultsEl.appendChild(sec);
+
+        matchedActions.forEach(act => {
+          const item = { type: 'action', action: act.action };
+          currentItems.push(item);
+          const itemIdx = currentItems.length - 1;
+
+          const itemNode = document.createElement('div');
+          itemNode.className = `spotlight-item ${itemIdx === selectedIdx ? 'active' : ''}`;
+          itemNode.innerHTML = `
+            <span class="spotlight-item-icon">${act.icon}</span>
+            <div class="spotlight-item-main">
+              <div class="spotlight-item-title">${act.name}</div>
+              <div class="spotlight-item-sub">시스템 명령 실행</div>
+            </div>
+          `;
+          itemNode.addEventListener('click', () => executeSpotlightItem(item));
+          resultsEl.appendChild(itemNode);
+        });
+      }
+
+      // Matched Files
+      if (query && state.files && state.files.length > 0) {
+        const matchedFiles = state.files.filter(f => f.name.toLowerCase().includes(qLower)).slice(0, 8);
+        if (matchedFiles.length > 0) {
+          const sec = document.createElement('div');
+          sec.className = 'spotlight-section-title';
+          sec.textContent = '보관함 파일';
+          resultsEl.appendChild(sec);
+
+          matchedFiles.forEach(file => {
+            const isDir = file.type === 'folder';
+            const icon = isDir ? '📁' : (file.type === 'image' ? '🖼️' : (file.type === 'video' ? '🎬' : (file.type === 'audio' ? '🎵' : '📄')));
+            const item = {
+              type: 'file',
+              action: () => {
+                if (isDir) {
+                  openDesktopWindow('finder');
+                  navigateFolder(file.path);
+                } else if (file.isText) {
+                  openDesktopWindow('editor');
+                  openEditorWithFile(file.path);
+                } else {
+                  openQuickLook(file, state.files);
+                }
+              }
+            };
+            currentItems.push(item);
+            const itemIdx = currentItems.length - 1;
+
+            const itemNode = document.createElement('div');
+            itemNode.className = `spotlight-item ${itemIdx === selectedIdx ? 'active' : ''}`;
+            itemNode.innerHTML = `
+              <span class="spotlight-item-icon">${icon}</span>
+              <div class="spotlight-item-main">
+                <div class="spotlight-item-title">${escapeHtml(file.name)}</div>
+                <div class="spotlight-item-sub">${isDir ? '폴더' : file.sizeFormatted + ' · ' + (file.path || '')}</div>
+              </div>
+            `;
+            itemNode.addEventListener('click', () => executeSpotlightItem(item));
+            resultsEl.appendChild(itemNode);
+          });
+        }
+      }
+
+      if (currentItems.length === 0 && !mathResult) {
+        resultsEl.innerHTML = `<div class="spotlight-empty">'${escapeHtml(query)}' 검색 결과가 없습니다.</div>`;
+      }
+    }
+  }
+
+  // 2. Quick Look 스페이스바 파일 미리보기
+  let currentQuickLookList = [];
+  let currentQuickLookIndex = 0;
+
+  function openQuickLook(file, list = null) {
+    const ql = document.getElementById('desktop-quicklook');
+    if (!ql || !file) return;
+
+    if (list && list.length > 0) {
+      currentQuickLookList = list;
+      currentQuickLookIndex = list.findIndex(f => f.path === file.path);
+      if (currentQuickLookIndex === -1) currentQuickLookIndex = 0;
+    } else {
+      currentQuickLookList = [file];
+      currentQuickLookIndex = 0;
+    }
+
+    renderQuickLookContent();
+    ql.classList.remove('hidden');
+  }
+
+  function closeQuickLook() {
+    const ql = document.getElementById('desktop-quicklook');
+    if (!ql) return;
+    ql.classList.add('hidden');
+    const body = document.getElementById('quicklook-body');
+    if (body) {
+      const vid = body.querySelector('video, audio');
+      if (vid) vid.pause();
+      body.innerHTML = '';
+    }
+  }
+
+  function quickLookNext(dir) {
+    if (!currentQuickLookList.length) return;
+    currentQuickLookIndex = (currentQuickLookIndex + dir + currentQuickLookList.length) % currentQuickLookList.length;
+    renderQuickLookContent();
+  }
+
+  function renderQuickLookContent() {
+    const file = currentQuickLookList[currentQuickLookIndex];
+    if (!file) return;
+
+    const filenameEl = document.getElementById('quicklook-filename');
+    const filesizeEl = document.getElementById('quicklook-filesize');
+    const counterEl = document.getElementById('quicklook-counter');
+    const bodyEl = document.getElementById('quicklook-body');
+    const openBtn = document.getElementById('btn-quicklook-open');
+
+    if (filenameEl) filenameEl.textContent = file.name;
+    if (filesizeEl) filesizeEl.textContent = file.type === 'folder' ? '폴더' : (file.sizeFormatted || '');
+    if (counterEl) counterEl.textContent = `${currentQuickLookIndex + 1} / ${currentQuickLookList.length}`;
+
+    if (openBtn) {
+      openBtn.onclick = () => {
+        closeQuickLook();
+        if (file.type === 'folder') {
+          openDesktopWindow('finder');
+          navigateFolder(file.path);
+        } else if (file.isText) {
+          openDesktopWindow('editor');
+          openEditorWithFile(file.path);
+        } else {
+          openPreview(state.files.findIndex(f => f.path === file.path));
+        }
+      };
+    }
+
+    if (!bodyEl) return;
+    bodyEl.innerHTML = '<div style="color:rgba(255,255,255,0.6)">불러오는 중...</div>';
+
+    const ext = (file.extension || '').toLowerCase();
+    const isImg = file.type === 'image' || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext);
+    const isVideo = file.type === 'video' || ['mp4', 'webm', 'mov', 'mkv'].includes(ext);
+    const isAudio = file.type === 'audio' || ['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext);
+
+    const viewUrl = `/api/view/${encodeURIComponent(file.path)}`;
+
+    if (isImg) {
+      bodyEl.innerHTML = `<img src="${viewUrl}" alt="${escapeHtml(file.name)}">`;
+    } else if (isVideo) {
+      bodyEl.innerHTML = `<video controls autoplay style="max-height:100%;max-width:100%" src="${viewUrl}"></video>`;
+    } else if (isAudio) {
+      bodyEl.innerHTML = `
+        <div style="text-align:center;padding:20px;">
+          <div style="font-size:48px;margin-bottom:12px;">🎵</div>
+          <div style="margin-bottom:14px;font-weight:500;">${escapeHtml(file.name)}</div>
+          <audio controls autoplay src="${viewUrl}"></audio>
+        </div>`;
+    } else if (file.isText || ['txt', 'md', 'js', 'py', 'html', 'css', 'json', 'sh', 'log'].includes(ext)) {
+      fetch(viewUrl)
+        .then(r => r.ok ? r.text() : Promise.reject('파일을 읽을 수 없습니다.'))
+        .then(txt => {
+          bodyEl.innerHTML = `<pre class="quicklook-code">${escapeHtml(txt.slice(0, 100000))}</pre>`;
+        })
+        .catch(err => {
+          bodyEl.innerHTML = `<div style="color:#ff6b6b;padding:20px;">${escapeHtml(err)}</div>`;
+        });
+    } else {
+      bodyEl.innerHTML = `
+        <div style="text-align:center;padding:30px;">
+          <div style="font-size:56px;margin-bottom:12px;">📄</div>
+          <div style="font-size:16px;font-weight:600;margin-bottom:6px;">${escapeHtml(file.name)}</div>
+          <div style="color:rgba(255,255,255,0.5);font-size:13px;margin-bottom:20px;">${file.sizeFormatted || ''}</div>
+          <a href="/api/download/${encodeURIComponent(file.path)}" download="${escapeHtml(file.name)}" class="quicklook-btn" style="text-decoration:none;display:inline-block;padding:8px 16px;">파일 다운로드</a>
+        </div>`;
+    }
+  }
+
+  function getSelectedDesktopOrFinderFile() {
+    const activeFinderItem = document.querySelector('.finder-item.active, .finder-item.selected');
+    if (activeFinderItem && activeFinderItem.dataset.path) {
+      return state.files.find(f => f.path === activeFinderItem.dataset.path);
+    }
+    const activeShortcut = document.querySelector('.desktop-shortcut.selected');
+    if (activeShortcut && activeShortcut.dataset.path) {
+      return state.files.find(f => f.path === activeShortcut.dataset.path);
+    }
+    if (state.files && state.files.length > 0 && state.activeDesktopApp === 'finder') {
+      return state.files[0];
+    }
+    return null;
+  }
+
+  function setupQuickLookLogic() {
+    const ql = document.getElementById('desktop-quicklook');
+    const closeBtn = document.getElementById('btn-quicklook-close');
+    const prevBtn = document.getElementById('btn-quicklook-prev');
+    const nextBtn = document.getElementById('btn-quicklook-next');
+
+    if (closeBtn) closeBtn.addEventListener('click', closeQuickLook);
+    if (prevBtn) prevBtn.addEventListener('click', () => quickLookNext(-1));
+    if (nextBtn) nextBtn.addEventListener('click', () => quickLookNext(1));
+
+    if (ql) {
+      ql.addEventListener('click', (e) => {
+        if (e.target === ql) closeQuickLook();
+      });
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (state.currentAppView !== 'desktop') return;
+      const tag = document.activeElement ? document.activeElement.tagName : '';
+      if (['INPUT', 'TEXTAREA'].includes(tag) || document.activeElement.isContentEditable) return;
+
+      if (e.code === 'Space') {
+        if (ql && !ql.classList.contains('hidden')) {
+          e.preventDefault();
+          closeQuickLook();
+        } else {
+          const file = getSelectedDesktopOrFinderFile();
+          if (file) {
+            e.preventDefault();
+            openQuickLook(file, state.files);
+          }
+        }
+      } else if (e.key === 'Escape') {
+        if (ql && !ql.classList.contains('hidden')) {
+          e.preventDefault();
+          closeQuickLook();
+        }
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        if (ql && !ql.classList.contains('hidden')) {
+          e.preventDefault();
+          quickLookNext(1);
+        }
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        if (ql && !ql.classList.contains('hidden')) {
+          e.preventDefault();
+          quickLookNext(-1);
+        }
+      }
+    });
+  }
+
+  // 3. Mission Control 멀티태스킹 뷰
+  let missionControlActive = false;
+  let savedWindowTransforms = {};
+
+  function toggleMissionControl() {
+    if (missionControlActive) {
+      deactivateMissionControl();
+    } else {
+      activateMissionControl();
+    }
+  }
+
+  function activateMissionControl() {
+    const screen = document.getElementById('desktop-screen');
+    if (!screen) return;
+
+    const openWins = Object.keys(state.openWindows)
+      .map(id => document.getElementById('win-' + id))
+      .filter(w => w && !w.classList.contains('hidden') && !w.classList.contains('window-minimized'));
+
+    if (openWins.length === 0) {
+      showToast('현재 열려 있는 활성 창이 없습니다.');
+      return;
+    }
+
+    missionControlActive = true;
+    screen.classList.add('mission-control-active');
+    savedWindowTransforms = {};
+
+    const screenW = screen.clientWidth;
+    const screenH = screen.clientHeight - 80;
+    const count = openWins.length;
+
+    let cols = 1;
+    if (count === 2) cols = 2;
+    else if (count >= 3 && count <= 4) cols = 2;
+    else if (count >= 5) cols = 3;
+
+    const rows = Math.ceil(count / cols);
+    const cellW = screenW / cols;
+    const cellH = screenH / rows;
+
+    openWins.forEach((win, idx) => {
+      const appId = win.getAttribute('data-app');
+      savedWindowTransforms[appId] = {
+        top: win.style.top,
+        left: win.style.left,
+        transform: win.style.transform
+      };
+
+      const c = idx % cols;
+      const r = Math.floor(idx / cols);
+
+      const targetCenterX = c * cellW + cellW / 2;
+      const targetCenterY = 40 + r * cellH + cellH / 2;
+
+      const winW = win.offsetWidth;
+      const winH = win.offsetHeight;
+      const winLeft = win.offsetLeft;
+      const winTop = win.offsetTop;
+      const curCenterX = winLeft + winW / 2;
+      const curCenterY = winTop + winH / 2;
+
+      const scale = Math.min((cellW * 0.8) / winW, (cellH * 0.8) / winH, 0.75);
+      const deltaX = targetCenterX - curCenterX;
+      const deltaY = targetCenterY - curCenterY;
+
+      win.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(${scale})`;
+
+      let badge = win.querySelector('.mission-control-badge');
+      if (!badge) {
+        badge = document.createElement('div');
+        badge.className = 'mission-control-badge';
+        const titles = {
+          terminal: 'Pulse 터미널', finder: 'Pulse 파일', editor: 'Pulse 에디터',
+          monitor: 'Pulse 모니터', browser: 'Pulse 브라우저', linux: 'Linux 데스크톱',
+          settings: 'Pulse OS 설정', about: 'Pulse OS 정보', stickies: '스티커 메모', music: 'Pulse 음악'
+        };
+        badge.textContent = titles[appId] || '윈도우';
+        win.appendChild(badge);
+      }
+
+      function winClickHandler(e) {
+        e.stopPropagation();
+        deactivateMissionControl();
+        bringWindowToFront(appId);
+        win.removeEventListener('click', winClickHandler);
+      }
+      win.addEventListener('click', winClickHandler, { once: true });
+    });
+  }
+
+  function deactivateMissionControl() {
+    const screen = document.getElementById('desktop-screen');
+    if (!screen) return;
+    missionControlActive = false;
+    screen.classList.remove('mission-control-active');
+
+    Object.keys(savedWindowTransforms).forEach(appId => {
+      const win = document.getElementById('win-' + appId);
+      if (win) {
+        win.style.transform = savedWindowTransforms[appId].transform || '';
+        const badge = win.querySelector('.mission-control-badge');
+        if (badge) badge.remove();
+      }
+    });
+    savedWindowTransforms = {};
+  }
+
+  function setupMissionControlLogic() {
+    const missionBtn = document.getElementById('btn-desktop-mission');
+    if (missionBtn) missionBtn.addEventListener('click', toggleMissionControl);
+
+    const screen = document.getElementById('desktop-screen');
+    if (screen) {
+      screen.addEventListener('click', (e) => {
+        if (missionControlActive && !e.target.closest('.desktop-window')) {
+          deactivateMissionControl();
+        }
+      });
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (state.currentAppView !== 'desktop') return;
+      if (e.key === 'F3' || ((e.ctrlKey || e.metaKey) && e.key === 'ArrowUp')) {
+        e.preventDefault();
+        toggleMissionControl();
+      } else if (e.key === 'Escape' && missionControlActive) {
+        e.preventDefault();
+        deactivateMissionControl();
+      }
+    });
+  }
+
+  // 4. 바탕화면 마키(Marquee) 사각형 다중 선택
+  function setupDesktopIconsAndMarquee() {
+    const canvas = document.getElementById('desktop-canvas');
+    const marquee = document.getElementById('desktop-marquee-selection');
+    if (!canvas || !marquee) return;
+
+    let isSelecting = false;
+    let startX = 0, startY = 0;
+
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.desktop-window') ||
+          e.target.closest('.desktop-dock-wrap') ||
+          e.target.closest('.desktop-menubar') ||
+          e.target.closest('.desktop-shortcut')) {
+        return;
+      }
+      if (e.button !== 0) return;
+
+      isSelecting = true;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      if (!e.shiftKey) {
+        document.querySelectorAll('.desktop-shortcut.selected').forEach(sc => sc.classList.remove('selected'));
+      }
+
+      marquee.style.left = `${startX}px`;
+      marquee.style.top = `${startY}px`;
+      marquee.style.width = '0px';
+      marquee.style.height = '0px';
+      marquee.classList.remove('hidden');
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isSelecting) return;
+
+      const curX = e.clientX;
+      const curY = e.clientY;
+
+      const left = Math.min(startX, curX);
+      const top = Math.min(startY, curY);
+      const width = Math.abs(curX - startX);
+      const height = Math.abs(curY - startY);
+
+      marquee.style.left = `${left}px`;
+      marquee.style.top = `${top}px`;
+      marquee.style.width = `${width}px`;
+      marquee.style.height = `${height}px`;
+
+      const mRect = { left, top, right: left + width, bottom: top + height };
+
+      document.querySelectorAll('.desktop-shortcut').forEach(sc => {
+        const sRect = sc.getBoundingClientRect();
+        const overlap = !(
+          sRect.right < mRect.left ||
+          sRect.left > mRect.right ||
+          sRect.bottom < mRect.top ||
+          sRect.top > mRect.bottom
+        );
+        sc.classList.toggle('selected', overlap);
+      });
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isSelecting) {
+        isSelecting = false;
+        marquee.classList.add('hidden');
+      }
+    });
+
+    document.querySelectorAll('.desktop-shortcut').forEach(sc => {
+      sc.addEventListener('click', (e) => {
+        if (!e.shiftKey) {
+          document.querySelectorAll('.desktop-shortcut.selected').forEach(s => s.classList.remove('selected'));
+        }
+        sc.classList.add('selected');
+      });
+    });
+  }
+
+  // 5. macOS 통합 제어 센터 (Control Center)
+  function toggleTheme() {
+    const screen = document.getElementById('desktop-screen');
+    const themes = ['sonoma', 'sequoia', 'cyber', 'midnight'];
+    const current = localStorage.getItem('desktop_theme') || 'sonoma';
+    const next = themes[(themes.indexOf(current) + 1) % themes.length];
+    if (screen) screen.className = `desktop-screen theme-${next}`;
+    localStorage.setItem('desktop_theme', next);
+    document.querySelectorAll('.wp-option').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-theme') === next);
+    });
+    showToast(`테마가 '${next}'(으)로 변경되었습니다.`);
+  }
+
+  function toggleControlCenter() {
+    const cc = document.getElementById('desktop-control-center-popover');
+    if (!cc) return;
+    const isHidden = cc.classList.toggle('hidden');
+    if (!isHidden) {
+      updateControlCenterData();
+    }
+  }
+
+  function updateControlCenterData() {
+    const ipVal = document.getElementById('cc-ip-val');
+    const batVal = document.getElementById('cc-battery-val');
+    const cpuVal = document.getElementById('cc-cpu-val');
+    const memVal = document.getElementById('cc-mem-val');
+
+    if (state.dashboardData) {
+      if (ipVal && state.dashboardData.network) ipVal.textContent = state.dashboardData.network.localIp;
+      if (batVal && state.dashboardData.battery) batVal.textContent = state.dashboardData.battery.percentage !== null ? `${state.dashboardData.battery.percentage}%` : '연결됨';
+      if (cpuVal && state.dashboardData.cpu) cpuVal.textContent = state.dashboardData.cpu.usage !== undefined ? `${state.dashboardData.cpu.usage}%` : `${state.dashboardData.cpu.cores || 4}코어`;
+      if (memVal && state.dashboardData.memory) memVal.textContent = state.dashboardData.memory.usedFormatted || '정상';
+    }
+
+    const themeMode = document.getElementById('cc-theme-mode');
+    const isDark = document.body.classList.contains('theme-dark') || !document.body.classList.contains('theme-light');
+    if (themeMode) themeMode.textContent = isDark ? '다크 모드' : '라이트 모드';
+  }
+
+  function setupControlCenterLogic() {
+    const ccBtn = document.getElementById('btn-desktop-control-center');
+    const cc = document.getElementById('desktop-control-center-popover');
+    if (!cc) return;
+
+    if (ccBtn) ccBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleControlCenter();
+    });
+
+    document.addEventListener('click', (e) => {
+      if (cc && !cc.classList.contains('hidden')) {
+        if (!cc.contains(e.target) && e.target !== ccBtn && !ccBtn?.contains(e.target)) {
+          cc.classList.add('hidden');
+        }
+      }
+    });
+
+    const copyIpBtn = document.getElementById('btn-cc-copy-ip');
+    if (copyIpBtn) {
+      copyIpBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const ip = document.getElementById('cc-ip-val')?.textContent || '';
+        if (ip) {
+          navigator.clipboard?.writeText(ip);
+          showToast(`IP 주소(${ip})가 클립보드에 복사되었습니다.`);
+        }
+      });
+    }
+
+    const themeBtn = document.getElementById('btn-cc-theme-toggle');
+    if (themeBtn) {
+      themeBtn.addEventListener('click', () => {
+        toggleTheme();
+        updateControlCenterData();
+      });
+    }
+
+    const blurSlider = document.getElementById('cc-blur-slider');
+    const blurVal = document.getElementById('cc-blur-val');
+    if (blurSlider) {
+      blurSlider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        if (blurVal) blurVal.textContent = `${val}px`;
+        const screen = document.getElementById('desktop-screen');
+        if (screen) screen.style.backdropFilter = val > 0 ? `blur(${val}px)` : '';
+      });
+    }
+
+    const volSlider = document.getElementById('cc-volume-slider');
+    const volVal = document.getElementById('cc-volume-val');
+    if (volSlider) {
+      volSlider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        if (volVal) volVal.textContent = `${val}%`;
+        const audio = document.getElementById('pulse-bg-audio');
+        if (audio) audio.volume = val / 100;
+        const musicVol = document.getElementById('music-vol-slider');
+        if (musicVol) musicVol.value = val;
+      });
+    }
+
+    document.getElementById('btn-cc-reload')?.addEventListener('click', () => location.reload());
+    document.getElementById('btn-cc-mission')?.addEventListener('click', () => {
+      cc.classList.add('hidden');
+      toggleMissionControl();
+    });
+    document.getElementById('btn-cc-restart')?.addEventListener('click', async () => {
+      if (confirm('서버를 재부팅하시겠습니까?')) {
+        try {
+          await Pulse.post('/api/restart');
+          showToast('서버를 재시작하는 중입니다...');
+        } catch (e) {
+          showToast('재부팅 명령 실패: ' + e.message);
+        }
+      }
+    });
+  }
+
+  // 6. 맥 스타일 스티커 메모 (Stickies)
+  function setupStickiesLogic() {
+    const textarea = document.getElementById('sticky-textarea');
+    const charCount = document.getElementById('sticky-char-count');
+    const stickyBody = document.getElementById('sticky-body');
+    const clearBtn = document.getElementById('btn-sticky-clear');
+    const foldBtn = document.getElementById('btn-stickies-fold');
+    const winStickies = document.getElementById('win-stickies');
+
+    if (!textarea || !stickyBody) return;
+
+    const savedText = localStorage.getItem('pulse_stickies_text');
+    if (savedText) {
+      textarea.value = savedText;
+      if (charCount) charCount.textContent = `${savedText.length}자`;
+    }
+
+    const savedColor = localStorage.getItem('pulse_stickies_color') || 'yellow';
+    stickyBody.className = `sticky-body theme-${savedColor}`;
+    document.querySelectorAll('.sticky-color-dot').forEach(dot => {
+      dot.classList.toggle('active', dot.getAttribute('data-color') === savedColor);
+    });
+
+    textarea.addEventListener('input', (e) => {
+      const text = e.target.value;
+      localStorage.setItem('pulse_stickies_text', text);
+      if (charCount) charCount.textContent = `${text.length}자`;
+    });
+
+    document.querySelectorAll('.sticky-color-dot').forEach(dot => {
+      dot.addEventListener('click', () => {
+        const color = dot.getAttribute('data-color');
+        document.querySelectorAll('.sticky-color-dot').forEach(d => d.classList.remove('active'));
+        dot.classList.add('active');
+        stickyBody.className = `sticky-body theme-${color}`;
+        localStorage.setItem('pulse_stickies_color', color);
+      });
+    });
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        if (textarea.value && confirm('스티커 메모를 모두 지우시겠습니까?')) {
+          textarea.value = '';
+          localStorage.removeItem('pulse_stickies_text');
+          if (charCount) charCount.textContent = '0자';
+        }
+      });
+    }
+
+    if (foldBtn && winStickies) {
+      foldBtn.addEventListener('click', () => {
+        winStickies.classList.toggle('window-folded');
+      });
+      winStickies.querySelector('.sticky-header')?.addEventListener('dblclick', (e) => {
+        if (e.target.closest('.sticky-actions') || e.target.closest('.traffic-light')) return;
+        winStickies.classList.toggle('window-folded');
+      });
+    }
+  }
+
+  // 7. Pulse Music 플레이어
+  let musicPlaylist = [];
+  let currentTrackIndex = -1;
+
+  function loadMusicPlaylist() {
+    const listEl = document.getElementById('music-playlist-list');
+    const countEl = document.getElementById('music-playlist-count');
+    if (!listEl) return;
+
+    const audioExts = ['mp3', 'flac', 'wav', 'm4a', 'ogg', 'aac', 'opus', 'wma'];
+    musicPlaylist = (state.files || []).filter(f => {
+      if (f.type === 'audio') return true;
+      const ext = (f.extension || '').toLowerCase();
+      return audioExts.includes(ext);
+    });
+
+    if (countEl) countEl.textContent = musicPlaylist.length;
+
+    if (musicPlaylist.length === 0) {
+      listEl.innerHTML = '<div class="music-playlist-empty" style="color:rgba(255,255,255,0.4);padding:16px;text-align:center;">보관함에 음악 파일이 없습니다.<br>MP3/WAV 파일을 보관함에 업로드해 보세요!</div>';
+      return;
+    }
+
+    listEl.innerHTML = '';
+    musicPlaylist.forEach((track, idx) => {
+      const item = document.createElement('div');
+      item.className = `music-track-item ${idx === currentTrackIndex ? 'playing' : ''}`;
+      item.innerHTML = `
+        <span style="display:flex;align-items:center;gap:8px;min-width:0;">
+          <span>${idx === currentTrackIndex ? '▶' : '🎵'}</span>
+          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(track.name)}</span>
+        </span>
+        <span style="color:rgba(255,255,255,0.4);font-size:11px;flex-shrink:0;">${track.sizeFormatted || ''}</span>
+      `;
+      item.addEventListener('click', () => playTrack(idx));
+      listEl.appendChild(item);
+    });
+  }
+
+  function playTrack(index) {
+    if (index < 0 || index >= musicPlaylist.length) return;
+    currentTrackIndex = index;
+    const track = musicPlaylist[index];
+    const audio = document.getElementById('pulse-bg-audio');
+    const titleEl = document.getElementById('music-track-title');
+    const artistEl = document.getElementById('music-track-artist');
+    const playBtn = document.getElementById('btn-music-play');
+    const vinyl = document.getElementById('music-vinyl');
+
+    if (titleEl) titleEl.textContent = track.name;
+    if (artistEl) artistEl.textContent = track.path ? `보관함 / ${track.path}` : 'Pulse 보관함 음악';
+
+    if (audio) {
+      audio.src = `/api/view/${encodeURIComponent(track.path)}`;
+      audio.play().then(() => {
+        if (playBtn) playBtn.textContent = '⏸';
+        if (vinyl) vinyl.classList.add('playing');
+      }).catch(() => {});
+    }
+
+    loadMusicPlaylist();
+  }
+
+  function setupMusicPlayerLogic() {
+    const audio = document.getElementById('pulse-bg-audio');
+    const playBtn = document.getElementById('btn-music-play');
+    const prevBtn = document.getElementById('btn-music-prev');
+    const nextBtn = document.getElementById('btn-music-next');
+    const progBar = document.getElementById('music-progress-bar');
+    const curTime = document.getElementById('music-time-cur');
+    const durTime = document.getElementById('music-time-dur');
+    const volSlider = document.getElementById('music-vol-slider');
+    const refreshBtn = document.getElementById('btn-music-refresh');
+    const vinyl = document.getElementById('music-vinyl');
+
+    if (!audio) return;
+
+    if (playBtn) {
+      playBtn.addEventListener('click', () => {
+        if (!audio.src && musicPlaylist.length > 0) {
+          playTrack(0);
+          return;
+        }
+        if (audio.paused) {
+          audio.play().then(() => {
+            playBtn.textContent = '⏸';
+            vinyl?.classList.add('playing');
+          });
+        } else {
+          audio.pause();
+          playBtn.textContent = '▶';
+          vinyl?.classList.remove('playing');
+        }
+      });
+    }
+
+    if (prevBtn) {
+      prevBtn.addEventListener('click', () => {
+        if (musicPlaylist.length === 0) return;
+        const prev = (currentTrackIndex - 1 + musicPlaylist.length) % musicPlaylist.length;
+        playTrack(prev);
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', () => {
+        if (musicPlaylist.length === 0) return;
+        const next = (currentTrackIndex + 1) % musicPlaylist.length;
+        playTrack(next);
+      });
+    }
+
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        fetchFiles().then(loadMusicPlaylist);
+      });
+    }
+
+    audio.addEventListener('timeupdate', () => {
+      if (!audio.duration) return;
+      const pct = (audio.currentTime / audio.duration) * 100;
+      if (progBar) progBar.value = pct;
+
+      const curM = Math.floor(audio.currentTime / 60);
+      const curS = String(Math.floor(audio.currentTime % 60)).padStart(2, '0');
+      if (curTime) curTime.textContent = `${curM}:${curS}`;
+
+      const durM = Math.floor(audio.duration / 60);
+      const durS = String(Math.floor(audio.duration % 60)).padStart(2, '0');
+      if (durTime) durTime.textContent = `${durM}:${durS}`;
+    });
+
+    if (progBar) {
+      progBar.addEventListener('input', (e) => {
+        if (audio.duration) {
+          audio.currentTime = (e.target.value / 100) * audio.duration;
+        }
+      });
+    }
+
+    if (volSlider) {
+      volSlider.addEventListener('input', (e) => {
+        audio.volume = e.target.value / 100;
+      });
+    }
+
+    audio.addEventListener('ended', () => {
+      if (musicPlaylist.length > 0) {
+        const next = (currentTrackIndex + 1) % musicPlaylist.length;
+        playTrack(next);
+      }
+    });
+  }
+
+  // 8. Dock Magnification (호버 확대)
+  function setupDockMagnificationAndMotion() {
+    const dock = document.getElementById('desktop-dock');
+    if (!dock) return;
+
+    dock.addEventListener('mousemove', (e) => {
+      const items = dock.querySelectorAll('.dock-item');
+      const mouseX = e.clientX;
+      const radius = 120;
+
+      items.forEach(item => {
+        const rect = item.getBoundingClientRect();
+        const itemCenterX = rect.left + rect.width / 2;
+        const dist = Math.abs(mouseX - itemCenterX);
+
+        if (dist < radius) {
+          const factor = Math.cos((dist / radius) * (Math.PI / 2));
+          const scale = 1 + 0.32 * factor;
+          const translateY = -10 * factor;
+          item.style.transform = `scale(${scale}) translateY(${translateY}px)`;
+        } else {
+          item.style.transform = 'scale(1) translateY(0)';
+        }
+      });
+    });
+
+    dock.addEventListener('mouseleave', () => {
+      const items = dock.querySelectorAll('.dock-item');
+      items.forEach(item => {
+        item.style.transform = 'scale(1) translateY(0)';
+      });
+    });
   }
 
   // ================= Utilities =================
