@@ -1888,24 +1888,63 @@
     }
   }
 
+  const DESKTOP_THEME_LABELS = {
+    sonoma: 'Sonoma Dunes',
+    sequoia: 'Sequoia Night',
+    cyber: 'Cyber Neon',
+    midnight: 'Midnight Ocean'
+  };
+
+  function placePopupAt(el, clientX, clientY, host, { minTop = 8, gutter = 8 } = {}) {
+    if (!el || !host) return;
+    el.classList.remove('hidden');
+    const hostRect = host.getBoundingClientRect();
+    const menuW = el.offsetWidth || 200;
+    const menuH = el.offsetHeight || 160;
+    let left = clientX - hostRect.left;
+    let top = clientY - hostRect.top;
+    if (left + menuW > hostRect.width - gutter) left -= menuW;
+    if (top + menuH > hostRect.height - gutter) top -= menuH;
+    left = Math.max(gutter, Math.min(left, hostRect.width - menuW - gutter));
+    top = Math.max(minTop, Math.min(top, hostRect.height - menuH - gutter));
+    el.style.left = `${Math.round(left)}px`;
+    el.style.top = `${Math.round(top)}px`;
+  }
+
   // Desktop OS Right-click Context Menu
   function setupContextMenu() {
     const ctxMenu = document.getElementById('desktop-context-menu');
     const screen = document.getElementById('desktop-screen');
     if (!ctxMenu || !screen) return;
 
+    let suppressHideUntil = 0;
+
     function hideMenu() {
       ctxMenu.classList.add('hidden');
       ctxMenu.innerHTML = '';
     }
 
+    function bindCtxActions(handlers) {
+      ctxMenu.querySelectorAll('.ctx-item').forEach(item => {
+        item.addEventListener('click', async (ev) => {
+          ev.stopPropagation();
+          const action = item.getAttribute('data-action');
+          hideMenu();
+          if (action && handlers[action]) await handlers[action]();
+        });
+      });
+    }
+
     document.addEventListener('click', (e) => {
+      if (Date.now() < suppressHideUntil) return;
       if (!ctxMenu.contains(e.target)) hideMenu();
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') hideMenu();
     });
     window.addEventListener('blur', hideMenu);
+    window.addEventListener('resize', hideMenu);
+    screen.addEventListener('wheel', hideMenu, { passive: true });
 
     function handleContextMenu(e) {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
@@ -1914,25 +1953,26 @@
       }
 
       const finderItem = e.target.closest('.finder-item');
+      const shortcut = e.target.closest('.desktop-shortcut');
       const windowEl = e.target.closest('.desktop-window');
       const dockEl = e.target.closest('.desktop-dock');
       const menubarEl = e.target.closest('.desktop-menubar');
+      const overlayEl = e.target.closest('.desktop-spotlight, .desktop-quicklook, .desktop-control-center-popover, .desktop-context-menu');
 
-      if (windowEl && !finderItem) {
-        hideMenu();
-        return;
-      }
-      if (dockEl || menubarEl) {
+      if (dockEl || menubarEl || overlayEl) {
         hideMenu();
         return;
       }
 
       e.preventDefault();
+      suppressHideUntil = Date.now() + 400;
 
       if (finderItem) {
         const path = finderItem.dataset.path;
         const file = finderItem._file || state.files.find(f => f.path === path);
         if (!file) { hideMenu(); return; }
+        finderItem.closest('#finder-file-grid')?.querySelectorAll('.finder-item.selected').forEach(el => el.classList.remove('selected'));
+        finderItem.classList.add('selected');
 
         const isDir = file.type === 'folder';
         ctxMenu.innerHTML = `
@@ -2016,6 +2056,54 @@
               }
             }
           });
+        });
+      } else if (shortcut) {
+        const appId = shortcut.getAttribute('data-app');
+        const names = {
+          terminal: 'Pulse 터미널', finder: 'Pulse 파일', editor: 'Pulse 에디터',
+          monitor: 'Pulse 모니터', browser: 'Pulse 브라우저', linux: 'Linux 데스크톱',
+          stickies: '스티커 메모', music: 'Pulse 음악', settings: 'Pulse OS 설정'
+        };
+        ctxMenu.innerHTML = `
+          <div class="ctx-item" data-action="open">
+            <span class="ctx-icon">🚀</span>
+            <span class="ctx-label">${names[appId] || '앱'} 열기</span>
+          </div>
+        `;
+        bindCtxActions({
+          open: () => openDesktopWindow(appId)
+        });
+      } else if (windowEl) {
+        const appId = windowEl.getAttribute('data-app');
+        const canMin = !!windowEl.querySelector('.traffic-light.btn-min');
+        const canMax = !!windowEl.querySelector('.traffic-light.btn-max');
+        const isMax = windowEl.classList.contains('window-maximized');
+        ctxMenu.innerHTML = `
+          <div class="ctx-item" data-action="front">
+            <span class="ctx-icon">⬆️</span>
+            <span class="ctx-label">앞으로 가져오기</span>
+          </div>
+          ${canMin ? `
+          <div class="ctx-item" data-action="min">
+            <span class="ctx-icon">⬇️</span>
+            <span class="ctx-label">최소화</span>
+          </div>` : ''}
+          ${canMax ? `
+          <div class="ctx-item" data-action="max">
+            <span class="ctx-icon">⛶</span>
+            <span class="ctx-label">${isMax ? '원래 크기로' : '최대화'}</span>
+          </div>` : ''}
+          <div class="ctx-divider"></div>
+          <div class="ctx-item ctx-danger" data-action="close">
+            <span class="ctx-icon">✕</span>
+            <span class="ctx-label">닫기</span>
+          </div>
+        `;
+        bindCtxActions({
+          front: () => bringWindowToFront(appId),
+          min: () => minimizeDesktopWindow(appId),
+          max: () => maximizeDesktopWindow(appId),
+          close: () => closeDesktopWindow(appId)
         });
       } else {
         // Desktop wallpaper context menu
@@ -2121,21 +2209,7 @@
         });
       }
 
-      ctxMenu.classList.remove('hidden');
-      const menuW = 200;
-      const menuH = 180;
-      let left = e.clientX;
-      let top = e.clientY;
-
-      if (left + menuW > window.innerWidth - 10) {
-        left = window.innerWidth - menuW - 10;
-      }
-      if (top + menuH > window.innerHeight - 10) {
-        top = window.innerHeight - menuH - 10;
-      }
-
-      ctxMenu.style.left = `${Math.max(10, left)}px`;
-      ctxMenu.style.top = `${Math.max(34, top)}px`;
+      placePopupAt(ctxMenu, e.clientX, e.clientY, screen, { minTop: 34, gutter: 8 });
     }
 
     screen.addEventListener('contextmenu', handleContextMenu);
@@ -2459,21 +2533,22 @@
       startX = clientX;
       startY = clientY;
       const rect = win.getBoundingClientRect();
-      const canvas = document.getElementById('desktop-canvas');
-      if (!canvas) return;
-      const canvasRect = canvas.getBoundingClientRect();
-      initialLeft = rect.left - canvasRect.left;
-      initialTop = rect.top - canvasRect.top;
+      const parent = win.offsetParent || document.getElementById('desktop-canvas');
+      if (!parent) return;
+      win._dragParent = parent;
+      const parentRect = parent.getBoundingClientRect();
+      initialLeft = rect.left - parentRect.left;
+      initialTop = rect.top - parentRect.top;
     }
 
     function onMove(clientX, clientY) {
       if (!isDragging) return;
       const dx = clientX - startX;
       const dy = clientY - startY;
-      const canvas = document.getElementById('desktop-canvas');
-      if (!canvas) return;
-      const maxLeft = canvas.clientWidth - 80;
-      const maxTop = canvas.clientHeight - 80;
+      const parent = win._dragParent || document.getElementById('desktop-canvas');
+      if (!parent) return;
+      const maxLeft = parent.clientWidth - 80;
+      const maxTop = parent.clientHeight - 80;
 
       const newLeft = Math.max(0, Math.min(initialLeft + dx, maxLeft));
       const newTop = Math.max(0, Math.min(initialTop + dy, maxTop));
@@ -2483,17 +2558,18 @@
       // Window Snap Detection
       if (snapPreview && window.innerWidth > 768) {
         const threshold = 24;
-        if (clientX <= threshold) {
+        const parentRect = parent.getBoundingClientRect();
+        if (clientX <= parentRect.left + threshold) {
           if (currentSnapZone !== 'left') {
             currentSnapZone = 'left';
             snapPreview.className = 'desktop-snap-preview snap-left';
           }
-        } else if (clientX >= window.innerWidth - threshold) {
+        } else if (clientX >= parentRect.right - threshold) {
           if (currentSnapZone !== 'right') {
             currentSnapZone = 'right';
             snapPreview.className = 'desktop-snap-preview snap-right';
           }
-        } else if (clientY <= 34) {
+        } else if (clientY <= parentRect.top + threshold) {
           if (currentSnapZone !== 'top') {
             currentSnapZone = 'top';
             snapPreview.className = 'desktop-snap-preview snap-top';
@@ -2898,7 +2974,7 @@
         <div class="finder-item-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
       `;
 
-      item.addEventListener('click', () => {
+      const openFinderFile = () => {
         if (file.type === 'folder') { navigateFolder(file.path); return; }
         if (file.isText) {
           openEditorWithFile(file.path || file.name);
@@ -2907,6 +2983,19 @@
           const idx = state.files.findIndex(f => f.path === file.path);
           if (idx !== -1) openPreview(idx);
         }
+      };
+
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('input[type="checkbox"]')) return;
+        grid.querySelectorAll('.finder-item.selected').forEach(el => el.classList.remove('selected'));
+        item.classList.add('selected');
+        if (window.innerWidth <= 768) openFinderFile();
+      });
+      item.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        grid.querySelectorAll('.finder-item.selected').forEach(el => el.classList.remove('selected'));
+        item.classList.add('selected');
+        openFinderFile();
       });
 
       addSelection(item, file);
@@ -3283,6 +3372,8 @@
           screen.className = `desktop-screen theme-${theme}`;
         }
         localStorage.setItem('desktop_theme', theme);
+        const themeMode = document.getElementById('cc-theme-mode');
+        if (themeMode) themeMode.textContent = DESKTOP_THEME_LABELS[theme] || theme;
       });
     });
 
@@ -3883,7 +3974,8 @@
       if (e.target.closest('.desktop-window') ||
           e.target.closest('.desktop-dock-wrap') ||
           e.target.closest('.desktop-menubar') ||
-          e.target.closest('.desktop-shortcut')) {
+          e.target.closest('.desktop-shortcut') ||
+          e.target.closest('.desktop-context-menu')) {
         return;
       }
       if (e.button !== 0) return;
@@ -3896,8 +3988,9 @@
         document.querySelectorAll('.desktop-shortcut.selected').forEach(sc => sc.classList.remove('selected'));
       }
 
-      marquee.style.left = `${startX}px`;
-      marquee.style.top = `${startY}px`;
+      const canvasRect = canvas.getBoundingClientRect();
+      marquee.style.left = `${startX - canvasRect.left}px`;
+      marquee.style.top = `${startY - canvasRect.top}px`;
       marquee.style.width = '0px';
       marquee.style.height = '0px';
       marquee.classList.remove('hidden');
@@ -3908,18 +4001,19 @@
 
       const curX = e.clientX;
       const curY = e.clientY;
+      const canvasRect = canvas.getBoundingClientRect();
 
-      const left = Math.min(startX, curX);
-      const top = Math.min(startY, curY);
+      const leftVp = Math.min(startX, curX);
+      const topVp = Math.min(startY, curY);
       const width = Math.abs(curX - startX);
       const height = Math.abs(curY - startY);
 
-      marquee.style.left = `${left}px`;
-      marquee.style.top = `${top}px`;
+      marquee.style.left = `${leftVp - canvasRect.left}px`;
+      marquee.style.top = `${topVp - canvasRect.top}px`;
       marquee.style.width = `${width}px`;
       marquee.style.height = `${height}px`;
 
-      const mRect = { left, top, right: left + width, bottom: top + height };
+      const mRect = { left: leftVp, top: topVp, right: leftVp + width, bottom: topVp + height };
 
       document.querySelectorAll('.desktop-shortcut').forEach(sc => {
         const sRect = sc.getBoundingClientRect();
@@ -3961,7 +4055,9 @@
     document.querySelectorAll('.wp-option').forEach(b => {
       b.classList.toggle('active', b.getAttribute('data-theme') === next);
     });
-    showToast(`테마가 '${next}'(으)로 변경되었습니다.`);
+    const themeMode = document.getElementById('cc-theme-mode');
+    if (themeMode) themeMode.textContent = DESKTOP_THEME_LABELS[next] || next;
+    showToast(`테마가 '${DESKTOP_THEME_LABELS[next] || next}'(으)로 변경되었습니다.`);
   }
 
   function toggleControlCenter() {
@@ -3987,8 +4083,8 @@
     }
 
     const themeMode = document.getElementById('cc-theme-mode');
-    const isDark = document.body.classList.contains('theme-dark') || !document.body.classList.contains('theme-light');
-    if (themeMode) themeMode.textContent = isDark ? '다크 모드' : '라이트 모드';
+    const theme = localStorage.getItem('desktop_theme') || 'sonoma';
+    if (themeMode) themeMode.textContent = DESKTOP_THEME_LABELS[theme] || theme;
   }
 
   function setupControlCenterLogic() {
@@ -4059,13 +4155,12 @@
       toggleMissionControl();
     });
     document.getElementById('btn-cc-restart')?.addEventListener('click', async () => {
-      if (confirm('서버를 재부팅하시겠습니까?')) {
-        try {
-          await Pulse.post('/api/restart');
-          showToast('서버를 재시작하는 중입니다...');
-        } catch (e) {
-          showToast('재부팅 명령 실패: ' + e.message);
-        }
+      if (!await Pulse.ask('서버를 재시작하시겠습니까?', { confirm: '재시작' })) return;
+      try {
+        await Pulse.post('/api/restart');
+        showToast('서버를 재시작하는 중입니다...');
+      } catch (e) {
+        showToast('재시작 명령 실패: ' + e.message);
       }
     });
   }
@@ -4110,12 +4205,12 @@
     });
 
     if (clearBtn) {
-      clearBtn.addEventListener('click', () => {
-        if (textarea.value && confirm('스티커 메모를 모두 지우시겠습니까?')) {
-          textarea.value = '';
-          localStorage.removeItem('pulse_stickies_text');
-          if (charCount) charCount.textContent = '0자';
-        }
+      clearBtn.addEventListener('click', async () => {
+        if (!textarea.value) return;
+        if (!await Pulse.ask('스티커 메모를 모두 지우시겠습니까?', { confirm: '지우기' })) return;
+        textarea.value = '';
+        localStorage.removeItem('pulse_stickies_text');
+        if (charCount) charCount.textContent = '0자';
       });
     }
 
@@ -4290,6 +4385,7 @@
     if (!dock) return;
 
     dock.addEventListener('mousemove', (e) => {
+      if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
       const items = dock.querySelectorAll('.dock-item');
       const mouseX = e.clientX;
       const radius = 120;

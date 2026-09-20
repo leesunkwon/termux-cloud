@@ -7,9 +7,6 @@
   <link rel="icon" type="image/png" href="assets/pulse-icon.png">
   <link rel="apple-touch-icon" href="assets/pulse-icon.png">
   <link rel="stylesheet" href="css/style.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700&family=Pretendard:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body data-role="viewer">
   <dialog id="pulse-login" class="pulse-dialog login-dialog" aria-labelledby="login-title">
@@ -1282,7 +1279,6 @@
             </div>
           </div>
         </div>
-      </div>
 
       <!-- [창 9: 스티커 메모] -->
       <div class="desktop-window hidden" id="win-stickies" data-app="stickies">
@@ -1365,6 +1361,10 @@
         </div>
       </div>
 
+      <div class="desktop-snap-preview hidden" id="desktop-snap-preview"></div>
+      <div class="desktop-marquee-selection hidden" id="desktop-marquee-selection"></div>
+      </div>
+
       <!-- 4. 하단 macOS 스타일 플로팅 독 (Dock) -->
       <footer class="desktop-dock-wrap">
         <div class="desktop-dock" id="desktop-dock">
@@ -1416,9 +1416,6 @@
           </button>
         </div>
       </footer>
-
-      <!-- 윈도우 50% 분할 스냅 프리뷰 가이드 -->
-      <div class="desktop-snap-preview hidden" id="desktop-snap-preview"></div>
 
       <!-- macOS 스타일 마우스 우클릭 컨텍스트 메뉴 -->
       <div class="desktop-context-menu hidden" id="desktop-context-menu" role="menu"></div>
@@ -1492,7 +1489,7 @@
             <div class="cc-tile-icon" id="cc-theme-icon">🌙</div>
             <div class="cc-tile-text">
               <div class="cc-tile-label">화면 테마</div>
-              <div class="cc-tile-sub" id="cc-theme-mode">다크 모드</div>
+              <div class="cc-tile-sub" id="cc-theme-mode">Sonoma Dunes</div>
             </div>
           </div>
         </div>
@@ -1539,8 +1536,6 @@
         </div>
       </div>
 
-      <!-- 4. 바탕화면 마키(Marquee) 사각형 다중 선택 영역 -->
-      <div class="desktop-marquee-selection hidden" id="desktop-marquee-selection"></div>
     </div>
   </section>
 

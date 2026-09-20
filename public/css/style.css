@@ -3755,6 +3755,11 @@ body {
   background: rgba(0, 113, 227, 0.08);
 }
 
+.finder-item.selected {
+  background: rgba(0, 113, 227, 0.16);
+  box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.45);
+}
+
 .finder-item-icon {
   font-size: 32px;
 }
@@ -4313,12 +4318,13 @@ body {
   justify-content: center;
   pointer-events: none;
   z-index: 950;
+  overflow: visible;
 }
 
 .desktop-dock {
   pointer-events: auto;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   padding: 8px 14px;
   background: rgba(255, 255, 255, 0.38);
@@ -4327,7 +4333,8 @@ body {
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.4);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
-  transition: transform 0.2s;
+  overflow: visible;
+  transform-origin: bottom center;
 }
 
 .dock-item {
@@ -4342,11 +4349,11 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background 0.15s;
+  transform-origin: bottom center;
+  transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1), background 0.15s;
 }
 
 .dock-item:hover {
-  transform: scale(1.2) translateY(-8px);
   background: rgba(255, 255, 255, 0.9);
 }
 
@@ -4417,6 +4424,7 @@ body {
   padding: 5px;
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.22), 0 0 0 0.5px rgba(255, 255, 255, 0.6) inset;
   user-select: none;
+  pointer-events: auto;
   animation: ctxMenuIn 0.12s cubic-bezier(0.16, 1, 0.3, 1);
   transform-origin: top left;
 }
