@@ -17,7 +17,7 @@ from pulse_metrics import Metrics
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
-APP_VERSION = 'v2.0.2'
+APP_VERSION = 'v2.1.0'
 INSTANCE_ID = uuid.uuid4().hex
 SERVER_START_TIME = datetime.now()
 METRICS = Metrics()
@@ -48,6 +48,8 @@ STORAGE_DIR = os.path.abspath(os.path.expanduser(os.environ.get('STORAGE_PATH', 
 
 # 저장 폴더가 없으면 생성
 os.makedirs(STORAGE_DIR, exist_ok=True)
+for _pulse_folder in ('Desktop', 'Notes'):
+    os.makedirs(os.path.join(STORAGE_DIR, _pulse_folder), exist_ok=True)
 
 # 2GB 최대 업로드 제한 (필요시 조절 가능)
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024

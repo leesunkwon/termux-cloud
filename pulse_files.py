@@ -312,3 +312,81 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
                 abort(404)
             shutil.rmtree(item)
         return jsonify(success=True)
+
+    @app.delete('/api/trash')
+    def empty_trash():
+        with mutation:
+            if trash.exists():
+                private_dir(trash)
+                for item in list(trash.iterdir()):
+                    if item.is_dir() and not item.is_symlink():
+                        shutil.rmtree(item)
+        return jsonify(success=True)
+
+    @app.post('/api/rename')
+    def rename_item():
+        body = data()
+        src = path_for(body.get('oldPath') or '')
+        new_name = body.get('newName', '')
+        if not isinstance(new_name, str) or not new_name.strip():
+            abort(400, description='새 이름을 입력하세요.')
+        new_name = new_name.strip()
+        if '/' in new_name or '\\' in new_name or new_name.startswith('.'):
+            abort(400, description='올바르지 않은 이름입니다.')
+        parent = '' if src.parent == root else src.parent.relative_to(root).as_posix()
+        dest = f'{parent}/{new_name}' if parent else new_name
+        dst = path_for(dest)
+        with mutation:
+            if not src.exists():
+                abort(404, description='항목이 없습니다.')
+            if dst.exists():
+                abort(409, description='같은 이름이 있습니다.')
+            src.rename(dst)
+        return jsonify(success=True, path=dst.relative_to(root).as_posix())
+
+    @app.post('/api/batch/delete')
+    def batch_delete():
+        paths = data().get('paths', [])
+        if not isinstance(paths, list) or not paths or len(paths) > 100:
+            abort(400, description='삭제할 항목을 선택하세요.')
+        deleted = []
+        with mutation:
+            private_dir(trash)
+            for rel in paths:
+                src = path_for(rel)
+                if not src.exists():
+                    continue
+                item = trash / uuid.uuid4().hex
+                item.mkdir(mode=0o700)
+                try:
+                    (item / 'metadata.json').write_text(json.dumps({
+                        'path': src.relative_to(root).as_posix(),
+                        'deleted': time.time()
+                    }))
+                    src.rename(item / 'content')
+                    deleted.append(rel)
+                except OSError:
+                    shutil.rmtree(item, ignore_errors=True)
+                    raise
+        return jsonify(success=True, deleted=deleted)
+
+    @app.post('/api/move')
+    def batch_move():
+        body = data()
+        paths = body.get('paths', [])
+        dest_rel = body.get('destination', '') or ''
+        if not isinstance(paths, list) or not paths:
+            abort(400, description='이동할 항목을 선택하세요.')
+        dest_dir = path_for(dest_rel, True)
+        if not dest_dir.is_dir():
+            abort(404, description='대상 폴더가 없습니다.')
+        with mutation:
+            for rel in paths:
+                src = path_for(rel)
+                if not src.exists():
+                    abort(404, description='원본 항목이 없습니다.')
+                dst = dest_dir / src.name
+                if dst.exists() or src == dest_dir or (src.is_dir() and src in dest_dir.parents):
+                    abort(409, description='대상 이름이 이미 있거나 이동할 수 없는 폴더입니다.')
+                src.rename(dst)
+        return jsonify(success=True)

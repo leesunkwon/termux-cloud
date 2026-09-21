@@ -38,6 +38,8 @@
     topZIndex: 100,
     editorCurrentFile: '',
     finderFilter: 'all',
+    finderView: 'browse',
+    desktopFiles: [],
   };
 
   // DOM Elements
@@ -752,6 +754,7 @@
         if (isManual) {
           showToast(`✨ 새로운 서버 업데이트가 발견되었습니다! (${data.behindCount || 1}개 커밋)`);
         }
+        pushNotification('업데이트 대기', `${data.behindCount || 1}개의 새 커밋이 있습니다.`, 'update-available');
       } else {
         state.hasUpdate = false;
         state.updateInfo = null;
@@ -839,12 +842,53 @@
     return `${metric.percent}%${metric.measurement === 'estimated' ? ' (추정)' : ''}`;
   }
   function joinPath(name) { return state.folder ? `${state.folder}/${name}` : name; }
+  function desktopJoin(name) {
+    const clean = String(name || '').replace(/[\\/]/g, '').trim();
+    return clean ? `Desktop/${clean}` : 'Desktop';
+  }
+  function loadRecents() {
+    try {
+      const items = JSON.parse(localStorage.getItem('pulse_recents') || '[]');
+      return Array.isArray(items) ? items : [];
+    } catch (_) { return []; }
+  }
+  function recordRecent(file) {
+    if (!file || !file.path) return;
+    const items = loadRecents().filter(x => x.path !== file.path);
+    items.unshift({
+      path: file.path,
+      name: file.name,
+      type: file.type || 'other',
+      isText: !!file.isText,
+      sizeFormatted: file.sizeFormatted || '',
+      openedAt: Date.now()
+    });
+    localStorage.setItem('pulse_recents', JSON.stringify(items.slice(0, 20)));
+  }
+  function loadNotifications() {
+    try {
+      const items = JSON.parse(localStorage.getItem('pulse_notifications') || '[]');
+      return Array.isArray(items) ? items : [];
+    } catch (_) { return []; }
+  }
+  function pushNotification(title, body, key) {
+    const items = loadNotifications();
+    if (key && items.some(n => n.key === key && Date.now() - n.time < 30 * 60 * 1000)) return;
+    items.unshift({ id: Date.now().toString(36), key: key || '', title, body, time: Date.now(), unread: true });
+    localStorage.setItem('pulse_notifications', JSON.stringify(items.slice(0, 40)));
+    renderNotificationCenter();
+  }
+  function formatNotifyTime(ts) {
+    const d = new Date(ts);
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
   function navigateFolder(path) {
     state.folder = path;
     state.page = 1;
     state.searchQuery = '';
     if (el.searchInput) el.searchInput.value = '';
     state.selected.clear();
+    state.finderView = 'browse';
     if (state.currentFilter !== 'all') {
       state.currentFilter = 'all';
       el.navItems.forEach(b => {
@@ -1153,6 +1197,7 @@
       renderFinderFiles();
       updateFileTools();
       updatePortalSummaries();
+      if (typeof fetchDesktopFiles === 'function') fetchDesktopFiles();
     } catch (error) {
       if (requestId !== fileRequest) return;
       state.files = [];
@@ -1509,6 +1554,7 @@
     state.activePreviewIndex = index;
     const file = state.previewableList[index];
     if (!file) return;
+    recordRecent(file);
     if (file.type === 'folder') { navigateFolder(file.path); return; }
 
     el.previewFilename.textContent = file.name;
@@ -1755,6 +1801,8 @@
           fetchFiles();
           fetchStorageStats();
           fetchDashboardData(true);
+          if (typeof fetchDesktopFiles === 'function') fetchDesktopFiles();
+          pushNotification('업로드 완료', `${file.name} 파일이 보관함에 저장되었습니다.`);
         } else {
           itemEl.querySelector('.upload-item-pct').textContent = '실패 ✕';
           showToast('업로드 실패. 로그인과 저장 공간을 확인하세요.', () => { uploadQueue.push({ file, folder }); pumpUploads(); });
@@ -1801,8 +1849,14 @@
       el.dropOverlay.classList.add('hidden');
 
       if (e.dataTransfer && e.dataTransfer.files.length > 0) {
-        if (state.currentAppView !== 'desktop') switchAppView('cloud');
-        uploadFiles(e.dataTransfer.files);
+        if (state.currentAppView === 'desktop') {
+          if (!Pulse.isAdmin) return;
+          for (const file of Array.from(e.dataTransfer.files)) uploadQueue.push({ file, folder: 'Desktop' });
+          pumpUploads();
+        } else {
+          switchAppView('cloud');
+          uploadFiles(e.dataTransfer.files);
+        }
       }
     });
   }
@@ -1832,8 +1886,13 @@
     setupDesktopIconsAndMarquee();
     setupControlCenterLogic();
     setupStickiesLogic();
+    setupNotesLogic();
+    setupCalculatorLogic();
+    setupTrashWindowLogic();
+    setupNotificationCenter();
     setupMusicPlayerLogic();
     setupDockMagnificationAndMotion();
+    fetchDesktopFiles();
 
     // Start Desktop Clock
     updateDesktopClock();
@@ -1873,6 +1932,10 @@
       }
       if (batPct && state.dashboardData.battery && state.dashboardData.battery.percentage !== null) {
         batPct.textContent = `${state.dashboardData.battery.percentage}%`;
+        const pct = state.dashboardData.battery.percentage;
+        if (pct <= 20) {
+          pushNotification('배터리 부족', `스마트폰 배터리가 ${pct}%입니다.`, 'battery-low');
+        }
       } else if (batPct) { batPct.textContent = '—'; }
       const data = state.dashboardData;
       const labels = {
@@ -1958,11 +2021,12 @@
       }
 
       const finderItem = e.target.closest('.finder-item');
+      const deskFileEl = e.target.closest('.desktop-file-icon');
       const shortcut = e.target.closest('.desktop-shortcut');
       const windowEl = e.target.closest('.desktop-window');
       const dockEl = e.target.closest('.desktop-dock');
       const menubarEl = e.target.closest('.desktop-menubar');
-      const overlayEl = e.target.closest('.desktop-spotlight, .desktop-quicklook, .desktop-control-center-popover, .desktop-context-menu');
+      const overlayEl = e.target.closest('.desktop-spotlight, .desktop-quicklook, .desktop-control-center-popover, .desktop-notify-popover, .desktop-context-menu');
 
       if (dockEl || menubarEl || overlayEl) {
         hideMenu();
@@ -2078,6 +2142,80 @@
         bindCtxActions({
           open: () => openDesktopWindow(appId)
         });
+      } else if (deskFileEl) {
+        const file = deskFileEl._file;
+        if (!file) { hideMenu(); return; }
+        document.querySelectorAll('.desktop-file-icon.selected').forEach(el => el.classList.remove('selected'));
+        deskFileEl.classList.add('selected');
+        const isDir = file.type === 'folder';
+        ctxMenu.innerHTML = `
+          <div class="ctx-item" data-action="open">
+            <span class="ctx-icon">${isDir ? '📂' : (file.isText ? '📝' : '👁️')}</span>
+            <span class="ctx-label">${isDir ? '열기' : (file.isText ? '에디터로 편집' : '미리보기')}</span>
+          </div>
+          ${!isDir ? `
+          <div class="ctx-item" data-action="quicklook">
+            <span class="ctx-icon">👁️</span>
+            <span class="ctx-label">빠른 미리보기</span>
+            <span class="ctx-shortcut">Space</span>
+          </div>
+          <div class="ctx-item" data-action="download">
+            <span class="ctx-icon">⬇️</span>
+            <span class="ctx-label">다운로드</span>
+          </div>` : ''}
+          ${Pulse.isAdmin ? `
+          <div class="ctx-divider"></div>
+          <div class="ctx-item" data-action="rename">
+            <span class="ctx-icon">✏️</span>
+            <span class="ctx-label">이름 변경</span>
+          </div>
+          <div class="ctx-item ctx-danger" data-action="delete">
+            <span class="ctx-icon">🗑️</span>
+            <span class="ctx-label">휴지통으로 이동</span>
+          </div>` : ''}
+        `;
+        bindCtxActions({
+          open: () => openDesktopFile(file),
+          quicklook: () => openQuickLook(file, state.desktopFiles),
+          download: () => {
+            const a = document.createElement('a');
+            a.href = `/api/download/${encodeURIComponent(file.path)}`;
+            a.download = file.name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+          },
+          rename: async () => {
+            const newName = await Pulse.ask('새 이름 입력:', { input: true, value: file.name });
+            if (!newName || newName.trim() === file.name) return;
+            const cleanName = newName.trim();
+            if (cleanName.includes('/') || cleanName.includes('\\')) {
+              showToast('이름에 경로 구분자를 사용할 수 없습니다.');
+              return;
+            }
+            try {
+              await Pulse.post('/api/rename', { oldPath: file.path, newName: cleanName });
+              showToast(`'${cleanName}'(으)로 변경되었습니다.`);
+              await fetchFiles();
+              fetchDesktopFiles();
+            } catch (err) {
+              showToast('이름 변경 실패: ' + err.message);
+            }
+          },
+          delete: async () => {
+            if (!await Pulse.ask(`'${file.name}' 항목을 휴지통으로 이동할까요?`, { confirm: '휴지통 이동' })) return;
+            try {
+              await Pulse.post('/api/batch/delete', { paths: [file.path] });
+              showToast(`'${file.name}'을(를) 휴지통으로 이동했습니다.`);
+              await fetchFiles();
+              fetchDesktopFiles();
+              fetchStorageStats();
+              if (typeof renderOsTrash === 'function') renderOsTrash();
+            } catch (err) {
+              showToast('삭제 실패: ' + err.message);
+            }
+          }
+        });
       } else if (windowEl) {
         const appId = windowEl.getAttribute('data-app');
         const canMin = !!windowEl.querySelector('.traffic-light.btn-min');
@@ -2165,13 +2303,13 @@
                 const res = await fetch('/api/files/create', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ filename: joinPath(cleanName), content: '' })
+                  body: JSON.stringify({ filename: desktopJoin(cleanName), content: '' })
                 });
                 const data = await res.json();
                 if (data.success) {
-                  showToast(`'${data.filename}' 파일이 생성되었습니다.`);
+                  showToast(`바탕화면에 '${data.filename}' 파일이 생성되었습니다.`);
                   await fetchFiles();
-                  renderFinderFiles();
+                  fetchDesktopFiles();
                   openEditorWithFile(data.filename);
                 } else {
                   showToast('파일 생성 실패: ' + (data.error || '오류'));
@@ -2188,10 +2326,10 @@
                 return;
               }
               try {
-                await Pulse.post('/api/folders', { path: joinPath(cleanName) });
-                showToast(`'${cleanName}' 폴더가 생성되었습니다.`);
+                await Pulse.post('/api/folders', { path: desktopJoin(cleanName) });
+                showToast(`바탕화면에 '${cleanName}' 폴더가 생성되었습니다.`);
                 await fetchFiles();
-                renderFinderFiles();
+                fetchDesktopFiles();
               } catch (err) {
                 showToast('폴더 생성 실패: ' + err.message);
               }
@@ -2206,6 +2344,7 @@
             } else if (action === 'refresh') {
               showToast('바탕화면 및 파일 상태를 새로고침했습니다.');
               fetchFiles().then(() => renderFinderFiles());
+              fetchDesktopFiles();
               fetchDashboardData(true).then(() => updateMonitorWidget());
             } else if (action === 'theme') {
               openDesktopWindow('settings');
@@ -2399,8 +2538,11 @@
         else if (appId === 'linux') { win.style.width = '720px'; win.style.height = '480px'; }
         else if (appId === 'settings') { win.style.width = '520px'; win.style.height = '380px'; }
         else if (appId === 'about') { win.style.width = '380px'; win.style.height = '340px'; }
-        else if (appId === 'stickies') { win.style.width = '320px'; win.style.height = '260px'; }
+        else if (appId === 'stickies') { win.style.width = '340px'; win.style.height = '300px'; }
         else if (appId === 'music') { win.style.width = '440px'; win.style.height = '480px'; }
+        else if (appId === 'notes') { win.style.width = '720px'; win.style.height = '460px'; }
+        else if (appId === 'calculator') { win.style.width = '280px'; win.style.height = '380px'; }
+        else if (appId === 'trash') { win.style.width = '520px'; win.style.height = '380px'; }
       }
       win.dataset.positioned = 'true';
     }
@@ -2427,6 +2569,10 @@
       if (ta) ta.focus();
     } else if (appId === 'music') {
       if (typeof loadMusicPlaylist === 'function') loadMusicPlaylist();
+    } else if (appId === 'notes') {
+      if (typeof loadNotesList === 'function') loadNotesList();
+    } else if (appId === 'trash') {
+      if (typeof renderOsTrash === 'function') renderOsTrash();
     }
   }
 
@@ -2510,6 +2656,9 @@
       linux: 'Linux 데스크톱',
       stickies: '스티커 메모',
       music: 'Pulse 음악',
+      notes: 'Pulse Notes',
+      calculator: '계산기',
+      trash: '휴지통',
       settings: 'Pulse OS 설정',
       about: 'Pulse OS 정보'
     };
@@ -2950,7 +3099,12 @@
       item.addEventListener('click', () => {
         document.querySelectorAll('.finder-nav-item').forEach(i => i.classList.remove('active'));
         item.classList.add('active');
-        state.finderFilter = item.getAttribute('data-finder-filter') || 'all';
+        if (item.getAttribute('data-finder-view') === 'recents') {
+          state.finderView = 'recents';
+        } else {
+          state.finderView = 'browse';
+          state.finderFilter = item.getAttribute('data-finder-filter') || 'all';
+        }
         renderFinderFiles();
       });
     });
@@ -2983,6 +3137,13 @@
     const bar = document.getElementById('finder-path-bar');
     if (!bar) return;
     bar.innerHTML = '';
+    if (state.finderView === 'recents') {
+      const label = document.createElement('span');
+      label.className = 'finder-path-seg current';
+      label.textContent = '최근 항목';
+      bar.appendChild(label);
+      return;
+    }
 
     const upBtn = document.createElement('button');
     upBtn.type = 'button';
@@ -3030,18 +3191,24 @@
     grid.innerHTML = '';
     renderFinderPath();
 
+    const recentsMode = state.finderView === 'recents';
     const filter = state.finderFilter || 'all';
-    const list = filter === 'all' ? (state.files || []) : (state.files || []).filter(f => f.type === filter);
+    const list = recentsMode
+      ? loadRecents()
+      : (filter === 'all' ? (state.files || []) : (state.files || []).filter(f => f.type === filter));
 
     if (status) {
-      const extra = filter === 'all' ? `${state.total}개 항목 · ${state.page}/${state.pages}페이지` : `${list.length}개 표시 중`;
-      status.textContent = extra;
+      status.textContent = recentsMode
+        ? `최근 항목 ${list.length}개`
+        : (filter === 'all' ? `${state.total}개 항목 · ${state.page}/${state.pages}페이지` : `${list.length}개 표시 중`);
     }
 
     if (list.length === 0) {
       const empty = document.createElement('div');
       empty.style.cssText = 'grid-column:1/-1;text-align:center;color:#86868b;padding:28px 12px;font-size:13px;line-height:1.5';
-      if (filter !== 'all') {
+      if (recentsMode) {
+        empty.textContent = '최근에 연 파일이 없습니다.';
+      } else if (filter !== 'all') {
         empty.textContent = '이 종류에 해당하는 항목이 없습니다.';
       } else if (state.folder) {
         empty.textContent = '이 폴더가 비어 있습니다. 상단의 새 폴더나 새 파일 버튼을 이용해 보세요.';
@@ -3063,12 +3230,13 @@
       `;
 
       const openFinderFile = () => {
+        recordRecent(file);
         if (file.type === 'folder') { navigateFolder(file.path); return; }
         if (file.isText) {
           openEditorWithFile(file.path || file.name);
         } else {
-          state.previewableList = state.files;
-          const idx = state.files.findIndex(f => f.path === file.path);
+          state.previewableList = recentsMode ? list : state.files;
+          const idx = state.previewableList.findIndex(f => f.path === file.path);
           if (idx !== -1) openPreview(idx);
         }
       };
@@ -3304,6 +3472,7 @@
       updateEditorHighlight();
       status.textContent = Pulse.isAdmin ? '저장됨 ✓' : '읽기 전용';
       status.classList.add('green');
+      recordRecent({ path: filename, name: filename.split('/').pop(), type: 'document', isText: true });
       openDesktopWindow('editor');
     } catch (error) {
       status.textContent = '불러오기 실패 · 기존 내용 유지';
@@ -3609,6 +3778,9 @@
         { id: 'terminal', name: 'Pulse 터미널', en: 'terminal bash shell cli', icon: '💻', desc: 'Linux 셸 명령 실행기', admin: true },
         { id: 'editor', name: 'Pulse 에디터', en: 'editor code text notepad', icon: '📝', desc: '코드 및 텍스트 편집기' },
         { id: 'stickies', name: '스티커 메모', en: 'stickies memo notes postit', icon: '📌', desc: '바탕화면 포스트잇 메모' },
+        { id: 'notes', name: 'Pulse Notes', en: 'notes markdown memo journal', icon: '📓', desc: '마크다운 메모장' },
+        { id: 'calculator', name: '계산기', en: 'calculator calc math', icon: '🧮', desc: '계산기' },
+        { id: 'trash', name: '휴지통', en: 'trash bin recycle', icon: '🗑️', desc: '삭제한 파일 복원', admin: true },
         { id: 'music', name: 'Pulse 음악', en: 'music audio player mp3', icon: '🎵', desc: '보관함 미디어 플레이어' },
         { id: 'monitor', name: 'Pulse 모니터', en: 'monitor activity resource cpu ram', icon: '📊', desc: '시스템 리소스 실시간 모니터' },
         { id: 'browser', name: 'Pulse 브라우저', en: 'browser web net', icon: '🌐', desc: '웹 사이트 브라우저' },
@@ -3737,6 +3909,40 @@
         }
       }
 
+      const recents = loadRecents().filter(file => {
+        if (!query) return true;
+        return (file.name || '').toLowerCase().includes(qLower) || (file.path || '').toLowerCase().includes(qLower);
+      }).slice(0, 6);
+      if (recents.length) {
+        const sec = document.createElement('div');
+        sec.className = 'spotlight-section-title';
+        sec.textContent = '최근 항목';
+        resultsEl.appendChild(sec);
+        recents.forEach(file => {
+          const item = {
+            type: 'recent',
+            action: () => {
+              if (file.isText) openEditorWithFile(file.path);
+              else if (file.type === 'folder') { openDesktopWindow('finder'); navigateFolder(file.path); }
+              else openQuickLook(file, loadRecents());
+            }
+          };
+          currentItems.push(item);
+          const itemIdx = currentItems.length - 1;
+          const itemNode = document.createElement('div');
+          itemNode.className = `spotlight-item ${itemIdx === selectedIdx ? 'active' : ''}`;
+          itemNode.innerHTML = `
+            <span class="spotlight-item-icon">🕐</span>
+            <div class="spotlight-item-main">
+              <div class="spotlight-item-title">${escapeHtml(file.name)}</div>
+              <div class="spotlight-item-sub">${escapeHtml(file.path || '')}</div>
+            </div>
+          `;
+          itemNode.addEventListener('click', () => executeSpotlightItem(item));
+          resultsEl.appendChild(itemNode);
+        });
+      }
+
       if (currentItems.length === 0 && !mathResult) {
         resultsEl.innerHTML = `<div class="spotlight-empty">'${escapeHtml(query)}' 검색 결과가 없습니다.</div>`;
       }
@@ -3750,6 +3956,7 @@
   function openQuickLook(file, list = null) {
     const ql = document.getElementById('desktop-quicklook');
     if (!ql || !file) return;
+    recordRecent(file);
 
     if (list && list.length > 0) {
       currentQuickLookList = list;
@@ -3854,9 +4061,14 @@
 
   function getSelectedDesktopOrFinderFile() {
     const activeFinderItem = document.querySelector('.finder-item.active, .finder-item.selected');
+    if (activeFinderItem && activeFinderItem._file) return activeFinderItem._file;
     if (activeFinderItem && activeFinderItem.dataset.path) {
-      return state.files.find(f => f.path === activeFinderItem.dataset.path);
+      return state.files.find(f => f.path === activeFinderItem.dataset.path) ||
+        state.desktopFiles.find(f => f.path === activeFinderItem.dataset.path) ||
+        loadRecents().find(f => f.path === activeFinderItem.dataset.path);
     }
+    const deskIcon = document.querySelector('.desktop-file-icon.selected');
+    if (deskIcon && deskIcon._file) return deskIcon._file;
     const activeShortcut = document.querySelector('.desktop-shortcut.selected');
     if (activeShortcut && activeShortcut.dataset.path) {
       return state.files.find(f => f.path === activeShortcut.dataset.path);
@@ -3893,7 +4105,8 @@
           const file = getSelectedDesktopOrFinderFile();
           if (file) {
             e.preventDefault();
-            openQuickLook(file, state.files);
+            const list = document.querySelector('.desktop-file-icon.selected') ? state.desktopFiles : state.files;
+            openQuickLook(file, list);
           }
         }
       } else if (e.key === 'Escape') {
@@ -3991,7 +4204,8 @@
         const titles = {
           terminal: 'Pulse 터미널', finder: 'Pulse 파일', editor: 'Pulse 에디터',
           monitor: 'Pulse 모니터', browser: 'Pulse 브라우저', linux: 'Linux 데스크톱',
-          settings: 'Pulse OS 설정', about: 'Pulse OS 정보', stickies: '스티커 메모', music: 'Pulse 음악'
+          settings: 'Pulse OS 설정', about: 'Pulse OS 정보', stickies: '스티커 메모', music: 'Pulse 음악',
+          notes: 'Pulse Notes', calculator: '계산기', trash: '휴지통'
         };
         badge.textContent = titles[appId] || '윈도우';
         win.appendChild(badge);
@@ -4067,6 +4281,7 @@
           e.target.closest('.desktop-dock-wrap') ||
           e.target.closest('.desktop-menubar') ||
           e.target.closest('.desktop-shortcut') ||
+          e.target.closest('.desktop-file-icon') ||
           e.target.closest('.desktop-context-menu')) {
         return;
       }
@@ -4155,6 +4370,7 @@
   function toggleControlCenter() {
     const cc = document.getElementById('desktop-control-center-popover');
     if (!cc) return;
+    document.getElementById('desktop-notify-popover')?.classList.add('hidden');
     const isHidden = cc.classList.toggle('hidden');
     if (!isHidden) {
       updateControlCenterData();
@@ -4256,54 +4472,234 @@
     });
   }
 
-  // 6. 맥 스타일 스티커 메모 (Stickies)
+  function fileGlyph(file) {
+    if (file.type === 'folder') return '📁';
+    if (file.type === 'image') return '🖼️';
+    if (file.type === 'video') return '🎬';
+    if (file.type === 'audio') return '🎵';
+    if (file.isText) return '📄';
+    return '📎';
+  }
+
+  async function fetchDesktopFiles() {
+    try {
+      const data = await Pulse.api('/api/files?' + new URLSearchParams({
+        path: 'Desktop', page: 1, limit: 100, type: 'all', q: '', sort: 'name-asc'
+      }));
+      state.desktopFiles = data.files || [];
+    } catch (_) {
+      state.desktopFiles = [];
+    }
+    renderDesktopFiles();
+  }
+
+  function renderDesktopFiles() {
+    const grid = document.getElementById('desktop-files-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    (state.desktopFiles || []).forEach(file => {
+      const elIcon = document.createElement('div');
+      elIcon.className = 'desktop-file-icon';
+      elIcon.tabIndex = 0;
+      elIcon.dataset.path = file.path;
+      elIcon._file = file;
+      elIcon.title = file.name;
+      const thumb = file.thumbnailUrl
+        ? `<img src="${escapeHtml(file.thumbnailUrl)}" alt="">`
+        : fileGlyph(file);
+      elIcon.innerHTML = `<div class="desktop-file-glyph">${thumb}</div><span class="desktop-file-name">${escapeHtml(file.name)}</span>`;
+      elIcon.addEventListener('click', (e) => {
+        e.stopPropagation();
+        grid.querySelectorAll('.desktop-file-icon.selected').forEach(n => n.classList.remove('selected'));
+        elIcon.classList.add('selected');
+        if (window.innerWidth <= 768) openDesktopFile(file);
+      });
+      elIcon.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        openDesktopFile(file);
+      });
+      elIcon.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') openDesktopFile(file);
+      });
+      grid.appendChild(elIcon);
+    });
+  }
+
+  function openDesktopFile(file) {
+    if (!file) return;
+    recordRecent(file);
+    if (file.type === 'folder') {
+      openDesktopWindow('finder');
+      navigateFolder(file.path);
+    } else if (file.isText) {
+      openEditorWithFile(file.path);
+    } else if (file.type === 'audio') {
+      openDesktopWindow('music');
+      openQuickLook(file, state.desktopFiles);
+    } else {
+      openQuickLook(file, state.desktopFiles);
+    }
+  }
+
+  function renderNotificationCenter() {
+    const list = document.getElementById('notify-list');
+    const dot = document.getElementById('menubar-notify-dot');
+    if (!list) return;
+    const items = loadNotifications();
+    if (dot) dot.classList.toggle('hidden', !items.some(n => n.unread));
+    if (!items.length) {
+      list.innerHTML = '<div class="notify-empty">새 알림이 없습니다.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    items.forEach(n => {
+      const row = document.createElement('div');
+      row.className = 'notify-item';
+      row.innerHTML = `<div class="notify-item-title">${escapeHtml(n.title)}</div>
+        <div class="notify-item-body">${escapeHtml(n.body || '')}</div>
+        <div class="notify-item-time">${formatNotifyTime(n.time)}</div>`;
+      list.appendChild(row);
+    });
+  }
+
+  function setupNotificationCenter() {
+    const btn = document.getElementById('btn-desktop-notifications');
+    const pop = document.getElementById('desktop-notify-popover');
+    const clearBtn = document.getElementById('btn-notify-clear');
+    if (!pop) return;
+    renderNotificationCenter();
+    if (btn) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const cc = document.getElementById('desktop-control-center-popover');
+        if (cc) cc.classList.add('hidden');
+        const opening = pop.classList.contains('hidden');
+        pop.classList.toggle('hidden');
+        if (opening) {
+          const items = loadNotifications().map(n => ({ ...n, unread: false }));
+          localStorage.setItem('pulse_notifications', JSON.stringify(items));
+          renderNotificationCenter();
+        }
+      });
+    }
+    document.addEventListener('click', (e) => {
+      if (!pop.classList.contains('hidden') && !pop.contains(e.target) && e.target !== btn && !btn?.contains(e.target)) {
+        pop.classList.add('hidden');
+      }
+    });
+    if (clearBtn) {
+      clearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        localStorage.setItem('pulse_notifications', '[]');
+        renderNotificationCenter();
+      });
+    }
+  }
+
+  // 6. 맥 스타일 스티커 메모 (여러 장)
   function setupStickiesLogic() {
     const textarea = document.getElementById('sticky-textarea');
     const charCount = document.getElementById('sticky-char-count');
     const stickyBody = document.getElementById('sticky-body');
-    const clearBtn = document.getElementById('btn-sticky-clear');
     const foldBtn = document.getElementById('btn-stickies-fold');
     const winStickies = document.getElementById('win-stickies');
-
+    const tabsEl = document.getElementById('sticky-tabs');
     if (!textarea || !stickyBody) return;
 
-    const savedText = localStorage.getItem('pulse_stickies_text');
-    if (savedText) {
-      textarea.value = savedText;
-      if (charCount) charCount.textContent = `${savedText.length}자`;
+    let notes = [];
+    let activeId = '';
+
+    function persist() {
+      localStorage.setItem('pulse_stickies_notes', JSON.stringify({ notes, activeId }));
+    }
+    function loadStore() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem('pulse_stickies_notes') || 'null');
+        if (parsed && Array.isArray(parsed.notes) && parsed.notes.length) {
+          notes = parsed.notes;
+          activeId = parsed.activeId || notes[0].id;
+          return;
+        }
+      } catch (_) {}
+      const legacyText = localStorage.getItem('pulse_stickies_text') || '';
+      const legacyColor = localStorage.getItem('pulse_stickies_color') || 'yellow';
+      notes = [{ id: 'n1', color: legacyColor, text: legacyText }];
+      activeId = 'n1';
+      persist();
+    }
+    function current() {
+      return notes.find(n => n.id === activeId) || notes[0];
+    }
+    function renderTabs() {
+      if (!tabsEl) return;
+      tabsEl.innerHTML = '';
+      notes.forEach((n, i) => {
+        const tab = document.createElement('button');
+        tab.type = 'button';
+        tab.className = `sticky-tab ${n.id === activeId ? 'active' : ''}`;
+        const label = (n.text || '').trim().split('\n')[0] || `메모 ${i + 1}`;
+        tab.textContent = label.slice(0, 16);
+        tab.addEventListener('click', () => { activeId = n.id; persist(); paint(); });
+        tabsEl.appendChild(tab);
+      });
+    }
+    function paint() {
+      const n = current();
+      if (!n) return;
+      textarea.value = n.text || '';
+      if (charCount) charCount.textContent = `${(n.text || '').length}자`;
+      stickyBody.className = `sticky-body theme-${n.color || 'yellow'}`;
+      document.querySelectorAll('#win-stickies .sticky-color-dot').forEach(dot => {
+        dot.classList.toggle('active', dot.getAttribute('data-color') === (n.color || 'yellow'));
+      });
+      renderTabs();
     }
 
-    const savedColor = localStorage.getItem('pulse_stickies_color') || 'yellow';
-    stickyBody.className = `sticky-body theme-${savedColor}`;
-    document.querySelectorAll('.sticky-color-dot').forEach(dot => {
-      dot.classList.toggle('active', dot.getAttribute('data-color') === savedColor);
-    });
+    loadStore();
+    paint();
 
     textarea.addEventListener('input', (e) => {
-      const text = e.target.value;
-      localStorage.setItem('pulse_stickies_text', text);
-      if (charCount) charCount.textContent = `${text.length}자`;
+      const n = current();
+      if (!n) return;
+      n.text = e.target.value;
+      if (charCount) charCount.textContent = `${n.text.length}자`;
+      persist();
+      renderTabs();
     });
 
-    document.querySelectorAll('.sticky-color-dot').forEach(dot => {
+    document.querySelectorAll('#win-stickies .sticky-color-dot').forEach(dot => {
       dot.addEventListener('click', () => {
-        const color = dot.getAttribute('data-color');
-        document.querySelectorAll('.sticky-color-dot').forEach(d => d.classList.remove('active'));
-        dot.classList.add('active');
-        stickyBody.className = `sticky-body theme-${color}`;
-        localStorage.setItem('pulse_stickies_color', color);
+        const n = current();
+        if (!n) return;
+        n.color = dot.getAttribute('data-color');
+        persist();
+        paint();
       });
     });
 
-    if (clearBtn) {
-      clearBtn.addEventListener('click', async () => {
-        if (!textarea.value) return;
-        if (!await Pulse.ask('스티커 메모를 모두 지우시겠습니까?', { confirm: '지우기' })) return;
-        textarea.value = '';
-        localStorage.removeItem('pulse_stickies_text');
-        if (charCount) charCount.textContent = '0자';
-      });
-    }
+    document.getElementById('btn-sticky-new')?.addEventListener('click', () => {
+      const id = 'n' + Date.now().toString(36);
+      notes.push({ id, color: 'yellow', text: '' });
+      activeId = id;
+      persist();
+      paint();
+      textarea.focus();
+    });
+
+    document.getElementById('btn-sticky-delete')?.addEventListener('click', async () => {
+      if (notes.length <= 1) {
+        const n = current();
+        if (n) n.text = '';
+        persist();
+        paint();
+        return;
+      }
+      if (!await Pulse.ask('이 스티커 메모를 삭제할까요?', { confirm: '삭제' })) return;
+      notes = notes.filter(n => n.id !== activeId);
+      activeId = notes[0].id;
+      persist();
+      paint();
+    });
 
     if (foldBtn && winStickies) {
       foldBtn.addEventListener('click', () => {
@@ -4314,6 +4710,232 @@
         winStickies.classList.toggle('window-folded');
       });
     }
+  }
+
+  function setupNotesLogic() {
+    const listEl = document.getElementById('notes-list');
+    const titleEl = document.getElementById('notes-title-input');
+    const bodyEl = document.getElementById('notes-textarea');
+    const statusEl = document.getElementById('notes-status');
+    if (!listEl || !bodyEl) return;
+    if (!Pulse.isAdmin) {
+      bodyEl.readOnly = true;
+      if (titleEl) titleEl.readOnly = true;
+    }
+    let currentPath = '';
+    let dirty = false;
+
+    function setStatus(text) { if (statusEl) statusEl.textContent = text; }
+
+    window.loadNotesList = async function loadNotesList() {
+      try {
+        const data = await Pulse.api('/api/files?' + new URLSearchParams({
+          path: 'Notes', page: 1, limit: 100, type: 'all', q: '', sort: 'modified-desc'
+        }));
+        const files = (data.files || []).filter(f => f.type !== 'folder' && (f.isText || (f.extension || '') === 'md'));
+        listEl.innerHTML = '';
+        if (!files.length) {
+          listEl.innerHTML = '<div class="notes-item-sub" style="padding:12px">저장된 메모가 없습니다.</div>';
+        }
+        files.forEach(file => {
+          const item = document.createElement('div');
+          item.className = `notes-item ${file.path === currentPath ? 'active' : ''}`;
+          item.innerHTML = `<div>${escapeHtml(file.name.replace(/\.md$/i, ''))}</div><div class="notes-item-sub">${escapeHtml(file.dateFormatted || '')}</div>`;
+          item.addEventListener('click', () => openNote(file));
+          listEl.appendChild(item);
+        });
+      } catch (err) {
+        setStatus('메모 목록을 불러오지 못했습니다.');
+      }
+    };
+
+    async function openNote(file) {
+      if (dirty && !await Pulse.ask('저장하지 않은 메모가 있습니다. 계속할까요?', { confirm: '변경 버리기' })) return;
+      try {
+        const res = await fetch('/api/preview/' + encodeURIComponent(file.path));
+        if (!res.ok) throw new Error('메모를 열 수 없습니다.');
+        bodyEl.value = await res.text();
+        titleEl.value = file.name.replace(/\.md$/i, '');
+        currentPath = file.path;
+        dirty = false;
+        setStatus(file.path);
+        recordRecent(file);
+        loadNotesList();
+      } catch (err) {
+        showToast(err.message);
+      }
+    }
+
+    async function saveNote() {
+      if (!Pulse.isAdmin) return;
+      const title = (titleEl.value || '').trim() || '새 메모';
+      const safe = title.replace(/[\\/]/g, '').replace(/\.md$/i, '');
+      const path = currentPath && currentPath.startsWith('Notes/') ? currentPath : `Notes/${safe}.md`;
+      try {
+        await Pulse.post('/api/files/save', { filename: path, content: bodyEl.value });
+        currentPath = path;
+        dirty = false;
+        setStatus(`저장됨 · ${path}`);
+        recordRecent({ path, name: `${safe}.md`, type: 'document', isText: true });
+        await loadNotesList();
+        showToast('메모를 저장했습니다.');
+      } catch (err) {
+        showToast('저장 실패: ' + err.message);
+      }
+    }
+
+    titleEl?.addEventListener('input', () => { dirty = true; setStatus('수정됨 · 저장되지 않음'); });
+    bodyEl.addEventListener('input', () => { dirty = true; setStatus('수정됨 · 저장되지 않음'); });
+    document.getElementById('btn-notes-save')?.addEventListener('click', saveNote);
+    document.getElementById('btn-notes-new')?.addEventListener('click', async () => {
+      if (!Pulse.isAdmin) return;
+      if (dirty && !await Pulse.ask('저장하지 않은 메모가 있습니다. 새 메모를 만들까요?', { confirm: '계속' })) return;
+      const name = await Pulse.ask('새 메모 제목:', { input: true, value: '새 메모' });
+      if (!name || !name.trim()) return;
+      const safe = name.trim().replace(/[\\/]/g, '');
+      const path = `Notes/${safe}.md`;
+      try {
+        await Pulse.post('/api/files/create', { filename: path, content: '' });
+        currentPath = path;
+        titleEl.value = safe;
+        bodyEl.value = '';
+        dirty = false;
+        setStatus(path);
+        await loadNotesList();
+        bodyEl.focus();
+      } catch (err) {
+        if (String(err.message).includes('같은 이름')) {
+          currentPath = path;
+          openNote({ path, name: `${safe}.md`, isText: true, type: 'document' });
+        } else showToast(err.message);
+      }
+    });
+    bodyEl.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        saveNote();
+      }
+    });
+  }
+
+  function setupCalculatorLogic() {
+    const display = document.getElementById('calc-display');
+    const grid = document.getElementById('calc-grid');
+    if (!display || !grid) return;
+    let curr = '0';
+    let prev = null;
+    let op = null;
+    let fresh = true;
+    function show() { display.textContent = curr; }
+    function compute() {
+      if (prev == null || !op) return;
+      const a = parseFloat(prev);
+      const b = parseFloat(curr);
+      let r = b;
+      if (op === '+') r = a + b;
+      else if (op === '-') r = a - b;
+      else if (op === '*') r = a * b;
+      else if (op === '/') r = b === 0 ? NaN : a / b;
+      curr = Number.isFinite(r) ? String(Number(r.toPrecision(12))) : '오류';
+      prev = null;
+      op = null;
+      fresh = true;
+    }
+    grid.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-calc]');
+      if (!btn) return;
+      const key = btn.getAttribute('data-calc');
+      if (key >= '0' && key <= '9') {
+        curr = (fresh || curr === '0' || curr === '오류') ? key : curr + key;
+        fresh = false;
+      } else if (key === '.') {
+        if (fresh) { curr = '0.'; fresh = false; }
+        else if (!curr.includes('.')) curr += '.';
+      } else if (key === 'ac') {
+        curr = '0'; prev = null; op = null; fresh = true;
+      } else if (key === 'sign') {
+        if (curr !== '0' && curr !== '오류') curr = curr.startsWith('-') ? curr.slice(1) : '-' + curr;
+      } else if (key === 'pct') {
+        curr = String(parseFloat(curr) / 100);
+        fresh = true;
+      } else if ('+-*/'.includes(key)) {
+        if (prev != null && !fresh) compute();
+        prev = curr; op = key; fresh = true;
+      } else if (key === '=') {
+        compute();
+      }
+      show();
+    });
+  }
+
+  async function renderOsTrash() {
+    const list = document.getElementById('os-trash-list');
+    const status = document.getElementById('os-trash-status');
+    if (!list) return;
+    if (!Pulse.isAdmin) {
+      list.innerHTML = '<div class="os-trash-empty">휴지통은 관리자만 사용할 수 있습니다.</div>';
+      return;
+    }
+    try {
+      const data = await Pulse.api('/api/trash');
+      const items = data.items || [];
+      if (status) status.textContent = items.length ? `${items.length}개 항목` : '비어 있음';
+      if (!items.length) {
+        list.innerHTML = '<div class="os-trash-empty">휴지통이 비어 있습니다.</div>';
+        return;
+      }
+      list.innerHTML = '';
+      items.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'os-trash-row';
+        const when = item.deleted ? formatNotifyTime(item.deleted * 1000) : '';
+        row.innerHTML = `<div class="os-trash-name">${escapeHtml(item.path || '')}<div class="os-trash-meta">${when}</div></div>`;
+        const restoreBtn = document.createElement('button');
+        restoreBtn.className = 'win-btn-sm';
+        restoreBtn.textContent = '복원';
+        restoreBtn.addEventListener('click', async () => {
+          try {
+            await Pulse.post(`/api/trash/${item.id}/restore`);
+            showToast('파일을 복원했습니다.');
+            await renderOsTrash();
+            fetchFiles();
+            fetchDesktopFiles();
+            fetchStorageStats();
+          } catch (err) { showToast(err.message); }
+        });
+        const purgeBtn = document.createElement('button');
+        purgeBtn.className = 'win-btn-sm';
+        purgeBtn.textContent = '영구 삭제';
+        purgeBtn.addEventListener('click', async () => {
+          if (!await Pulse.ask(`'${item.path}'을 영구 삭제할까요?`, { confirm: '영구 삭제' })) return;
+          try {
+            await Pulse.api(`/api/trash/${item.id}`, { method: 'DELETE' });
+            showToast('영구 삭제되었습니다.');
+            await renderOsTrash();
+            fetchStorageStats();
+          } catch (err) { showToast(err.message); }
+        });
+        row.appendChild(restoreBtn);
+        row.appendChild(purgeBtn);
+        list.appendChild(row);
+      });
+    } catch (err) {
+      list.innerHTML = `<div class="os-trash-empty">${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  function setupTrashWindowLogic() {
+    document.getElementById('btn-trash-refresh')?.addEventListener('click', renderOsTrash);
+    document.getElementById('btn-trash-empty')?.addEventListener('click', async () => {
+      if (!Pulse.isAdmin) return;
+      if (!await Pulse.ask('휴지통을 모두 비울까요? 이 작업은 되돌릴 수 없습니다.', { confirm: '비우기' })) return;
+      try {
+        await Pulse.api('/api/trash', { method: 'DELETE' });
+        showToast('휴지통을 비웠습니다.');
+        await renderOsTrash();
+        fetchStorageStats();
+      } catch (err) { showToast(err.message); }
+    });
   }
 
   // 7. Pulse Music 플레이어

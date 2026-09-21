@@ -13,7 +13,10 @@ window.Pulse = (() => {
     browser: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c6 6 6 12 0 18-6-6-6-12 0-18"/>',
     linux: '<rect x="3" y="3" width="18" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>',
     settings: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/>',
-    about: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-11v2"/>'
+    about: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-11v2"/>',
+    notes: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    calculator: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 11h2m4 0h2M8 16h2m4 0h2"/>',
+    trash: '<path d="M3 6h18M8 6V4h8v2m-1 0v14H9V6"/>'
   };
   function icon(name) {
     return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${paths[name] || paths.finder}</svg>`;
