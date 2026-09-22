@@ -2041,12 +2041,155 @@ body {
     display: flex;
   }
 
+  .global-navbar {
+    height: 48px;
+    padding: 0 10px;
+    gap: 8px;
+  }
+  .navbar-left .brand-title {
+    display: none;
+  }
+  .navbar-center-tabs {
+    gap: 2px;
+    padding: 2px;
+  }
+  .nav-tab-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+    border-radius: var(--radius-full);
+  }
+  .nav-tab-btn span {
+    display: none !important;
+  }
+  .nav-tab-btn svg {
+    width: 17px;
+    height: 17px;
+    margin: 0;
+  }
+  .nav-status-chip {
+    display: none;
+  }
+  #refresh-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .topbar {
-    padding: 0 16px;
+    height: 52px;
+    padding: 0 10px;
+    gap: 6px;
+  }
+
+  .topbar-left {
+    gap: 6px;
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  .page-title {
+    font-size: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .file-summary {
+    display: none;
   }
 
   .topbar-center {
-    display: none; /* 모바일에서는 공간 절약을 위해 상단 검색창 숨김 혹은 축소 */
+    display: none;
+  }
+
+  .topbar-right {
+    gap: 5px;
+    flex-shrink: 0;
+  }
+
+  .sort-select {
+    height: 32px;
+    padding: 0 4px;
+    font-size: 11px;
+    max-width: 80px;
+    border-radius: 8px;
+  }
+
+  .view-toggle-group {
+    padding: 2px;
+    border-radius: 8px;
+  }
+
+  .toggle-btn {
+    width: 26px;
+    height: 26px;
+  }
+
+  .toggle-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  #upload-btn span,
+  #btn-cloud-new-folder span,
+  #btn-zip-download span {
+    display: none !important;
+  }
+
+  #upload-btn,
+  #btn-cloud-new-folder,
+  #btn-zip-download {
+    width: 32px;
+    height: 32px;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+
+  .cloud-breadcrumb-bar {
+    padding: 6px 12px;
+    gap: 6px;
+  }
+  .btn-breadcrumb-up {
+    padding: 4px 8px;
+    font-size: 11.5px;
+  }
+  .breadcrumb-item {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .pulse-file-tools {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 6px;
+    padding: 6px 2px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--border-light);
+  }
+  .pulse-file-tools::-webkit-scrollbar {
+    display: none;
+  }
+  .pulse-file-tools .btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+    height: 30px;
+    padding: 0 10px;
+    font-size: 11.5px;
+    border-radius: var(--radius-full);
+  }
+  .pulse-file-tools .pulse-file-path {
+    display: none;
   }
 
   .file-grid {
@@ -2089,16 +2232,6 @@ body {
     justify-content: center;
   }
 
-  .navbar-center-tabs {
-    gap: 0;
-  }
-  .nav-tab-btn {
-    padding: 5px 8px;
-    font-size: 11.5px;
-  }
-  .nav-tab-btn span {
-    display: inline;
-  }
   .portal-grid {
     grid-template-columns: 1fr !important;
     gap: 16px !important;
@@ -4452,35 +4585,6 @@ body {
   margin: 0 4px;
 }
 
-/* 모바일 데스크탑 최적화 미디어 쿼리 */
-@media (max-width: 768px) {
-  .desktop-menubar .menubar-menus {
-    display: none;
-  }
-  .desktop-menubar #menubar-ip-badge {
-    display: none;
-  }
-  .desktop-dock {
-    gap: 4px;
-    padding: 6px 10px;
-    border-radius: 18px;
-  }
-  .dock-item {
-    width: 40px;
-    height: 40px;
-  }
-  .dock-icon {
-    font-size: 20px;
-  }
-  .desktop-window {
-    width: 95% !important;
-    left: 2.5% !important;
-    max-height: 80% !important;
-  }
-  .wallpaper-selector {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
 
 /* ================= Desktop Context Menu ================= */
 .desktop-context-menu {
@@ -4762,52 +4866,83 @@ button:disabled {
 .pulse-trash-actions .btn { height: 30px; padding: 0 11px; font-size: 12px; border-radius: var(--radius-full); gap: 4px; }
 .pulse-trash-footer { margin-top: 18px; display: flex; justify-content: flex-end; }
 @media (max-width: 768px) {
-  #view-desktop .desktop-screen { height:calc(var(--pulse-vh, 100dvh) - var(--pulse-top, 112px)); min-height:240px; }
-  .desktop-menubar { padding:0 10px; }
+  #view-desktop .desktop-screen { height:calc(var(--pulse-vh, 100dvh) - var(--pulse-top, 112px)); min-height:0; }
+  .desktop-menubar { padding:0 8px; height: 32px; }
+  .menubar-left { gap: 6px; min-width: 0; flex-shrink: 1; }
   .menubar-menus, #menubar-ip-badge, #menubar-battery-badge { display:none; }
-  .menubar-app-title { font-size:12px; white-space:nowrap; }
+  .menubar-app-title { font-size:12px; white-space:nowrap; max-width: 75px; overflow: hidden; text-overflow: ellipsis; }
+  .menubar-right { gap: 4px; flex-shrink: 0; }
+  #btn-desktop-mission, #btn-desktop-fullscreen { display: none; }
+  .menubar-focus-timer { display: none !important; }
+  .menubar-icon-btn { padding: 2px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; }
   .desktop-icons-grid { display:none; }
   .desktop-welcome { left:24px; right:24px; top:25%; text-align:center; }
   .desktop-welcome h2 { font-size:32px; }
   #view-desktop .desktop-window { top:0!important; left:0!important; width:100%!important; height:calc(100% - 76px - env(safe-area-inset-bottom))!important; min-width:0!important; min-height:0!important; border-radius:0; }
   #view-desktop .desktop-window.mobile-background { display:none!important; }
-  .window-header { cursor:default; flex-shrink:0; padding:0 8px; gap:6px; }
-  .window-traffic-lights { min-width:32px; gap:5px; }
-  .window-header-actions { min-width:40px; gap:4px; }
-  .win-btn-sm { font-size:11px; padding:3px 6px; height:24px; }
+  .window-header { cursor:default; flex-shrink:0; padding:0 8px; gap:6px; height: 38px; min-height: 38px; }
+  .window-traffic-lights { min-width:36px; gap:6px; }
+  .traffic-light.btn-max { display: none; }
+  .window-title { font-size: 12.5px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .window-header-actions { min-width: 0; gap: 4px; display: flex; align-items: center; }
+  .win-btn-sm { font-size:11px; padding:3px 6px; height:24px; white-space: nowrap; }
   .window-body { min-height:0; }
-  .desktop-dock-wrap { bottom:env(safe-area-inset-bottom, 0px); width:100%; }
-  .desktop-dock { max-width:100%; overflow-x:auto; justify-content:flex-start; gap:5px; padding:8px; border-radius:16px; }
-  .dock-item { flex:0 0 42px; width:42px; height:46px; }
-  .dock-icon svg { width:25px; height:25px; }
+  .desktop-dock-wrap { bottom:env(safe-area-inset-bottom, 6px); width:100%; padding: 0 8px; box-sizing: border-box; display: flex; justify-content: center; }
+  .desktop-dock { width: auto; max-width:100%; overflow-x:auto; overflow-y: hidden; justify-content:flex-start; gap:6px; padding:6px 8px; border-radius:18px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .desktop-dock::-webkit-scrollbar { display: none; }
+  .dock-item { flex:0 0 38px; width:38px; height:38px; border-radius: 10px; }
+  .dock-icon { font-size: 19px; }
+  .dock-icon svg { width:20px; height:20px; }
   .dock-item:hover { transform:none; }
   .dock-label { display:none; }
-  .finder-sidebar { width:92px; flex-shrink:0; }
-  .finder-nav-item { padding:10px 6px; font-size:11px; }
+  .dock-divider { flex-shrink: 0; margin: 0 2px; height: 24px; }
+  .finder-sidebar { width:78px; min-width: 70px; padding: 6px 2px; flex-shrink:0; }
+  .finder-nav-item { padding:8px 4px; font-size:10.5px; }
+  .finder-content { min-width:0; padding:8px; }
   .terminal-presets { overflow-x:auto; flex-wrap:nowrap; flex-shrink:0; }
   .terminal-presets button { flex-shrink:0; }
   .terminal-input { min-width:0; font-size:16px; }
   .terminal-prompt { max-width:30%; overflow:hidden; text-overflow:ellipsis; }
   .editor-textarea, .editor-highlight, .editor-gutter { font-size:14px; }
-  .pulse-account-bar { padding:4px 12px; }
-  .pulse-file-tools { gap:6px; }
+  .pulse-account-bar { padding:4px 10px; font-size: 11px; }
+  .pulse-pagination { padding:10px 0; gap:6px; font-size:11.5px; }
+  .wallpaper-selector { grid-template-columns: repeat(2, 1fr); }
+
+  /* App Window Resets on Mobile */
+  #win-photos, #win-clipboard, #win-cam, #win-notes, #win-editor, #win-terminal, #win-finder, #win-calculator { min-width: 0 !important; }
+  .notes-sidebar { width: 105px !important; min-width: 90px !important; }
+  .note-actions .win-btn-sm { padding: 2px 6px; font-size: 11px; }
+  .photos-sidebar { width: 85px !important; min-width: 75px !important; padding: 6px 3px; }
+  .photos-nav-item { padding: 6px 4px; font-size: 11px; }
+  .photos-thumb-grid { grid-template-columns: repeat(auto-fill, minmax(75px, 1fr)); gap: 3px; }
+  .cam-topbar { padding: 5px 8px; gap: 4px; flex-wrap: nowrap; }
+  .cam-controls-left { gap: 4px; min-width: 0; flex: 1; }
+  .cam-select { max-width: 98px; font-size: 10px; padding: 2px 4px; }
+  .cam-bottom-bar { padding: 8px 10px; gap: 6px; }
+  .cam-action-btn { font-size: 11px; padding: 5px 8px; white-space: nowrap; }
+  .cam-capture-btn { font-size: 11.5px; padding: 6px 10px; white-space: nowrap; }
+  .sticky-actions { gap: 3px; }
+  .sticky-color-dot { width: 13px; height: 13px; }
+  .sticky-actions .win-btn-sm { padding: 2px 5px; font-size: 10px; }
+
+  /* Portal footer on mobile */
+  .portal-footer-info { padding: 12px 14px; gap: 8px; flex-direction: column; align-items: stretch; }
+  .footer-chip { font-size: 12px; justify-content: space-between; }
+  .footer-changelog-btn { width: 100%; text-align: center; padding: 8px; font-size: 12px; }
+
+  /* Dashboard mobile adjustments */
+  .diagnostic-toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
+  #dash-sampled-at { min-width: 0 !important; text-align: center; font-size: 11px; }
+  .diagnostic-toolbar label { justify-content: space-between; }
+  .diagnostic-toolbar .btn { width: 100%; text-align: center; justify-content: center; }
 }
 
 .finder-item { position:relative; }
 .finder-item-icon svg { width:32px; height:32px; color:#5874e8; }
 .editor-gutter { white-space:pre; }
 .pulse-selection-inline { margin-right:8px; width:18px; height:18px; accent-color:#6170f8; }
-@media (max-width:768px) {
-  .finder-sidebar { min-width:82px; width:82px; padding:8px 3px; }
-  .finder-content { min-width:0; padding:10px; }
-  .pulse-pagination { padding:12px 0; gap:8px; font-size:12px; }
-}
-@media (prefers-reduced-motion:reduce) {
-  *, *::before, *::after { animation:none!important; transition:none!important; }
-}
 
 #view-desktop { height:calc(var(--pulse-vh, 100dvh) - var(--pulse-top, 100px)); min-height:0; }
-@media (max-width:768px) { #view-desktop .desktop-screen { min-height:0; } }
 
 .diagnostic-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:0 0 18px; color:var(--text-secondary); font-size:12px; }
 #dash-sampled-at { flex:1; min-width:230px; font-variant-numeric:tabular-nums; }
@@ -6478,6 +6613,353 @@ body.focus-mode-active .desktop-window.window-active {
 .cam-capture-btn {
   font-size: 13px; font-weight: 700; padding: 7px 16px;
   display: flex; align-items: center; gap: 8px; border-radius: 10px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   📱 Mobile Touch & Small Screen Comprehensive Overrides (v2.4.0)
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* 1. Global Navbar & Tabs */
+  .global-navbar {
+    height: 48px !important;
+    padding: 0 8px !important;
+    gap: 6px !important;
+  }
+  .navbar-left .brand-title {
+    display: none !important;
+  }
+  .navbar-center-tabs {
+    gap: 2px !important;
+    padding: 2px !important;
+  }
+  .nav-tab-btn {
+    padding: 5px 9px !important;
+    border-radius: 999px !important;
+  }
+  .nav-tab-btn span {
+    display: none !important;
+  }
+  .nav-tab-btn svg {
+    width: 17px !important;
+    height: 17px !important;
+    margin: 0 !important;
+  }
+  .nav-status-chip {
+    display: none !important;
+  }
+  #refresh-btn {
+    width: 32px !important;
+    height: 32px !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 50% !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* 2. Cloud Topbar & Action Buttons */
+  .topbar {
+    height: 52px !important;
+    padding: 0 10px !important;
+    gap: 6px !important;
+  }
+  .topbar-left {
+    gap: 6px !important;
+    min-width: 0 !important;
+    flex: 1 !important;
+  }
+  .page-title {
+    font-size: 15px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  .file-summary {
+    display: none !important;
+  }
+  .topbar-right {
+    gap: 5px !important;
+    flex-shrink: 0 !important;
+  }
+  .sort-select {
+    height: 32px !important;
+    padding: 0 4px !important;
+    font-size: 11px !important;
+    max-width: 80px !important;
+    border-radius: 8px !important;
+  }
+  .view-toggle-group {
+    padding: 2px !important;
+    border-radius: 8px !important;
+  }
+  .toggle-btn {
+    width: 26px !important;
+    height: 26px !important;
+  }
+  .toggle-btn svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  #upload-btn span,
+  #btn-cloud-new-folder span,
+  #btn-zip-download span {
+    display: none !important;
+  }
+  #upload-btn,
+  #btn-cloud-new-folder,
+  #btn-zip-download {
+    width: 32px !important;
+    height: 32px !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* 3. Single-row Horizontal Scrollable File Tools Bar */
+  .pulse-file-tools {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    gap: 6px !important;
+    padding: 6px 2px !important;
+    margin-bottom: 10px !important;
+    border-bottom: 1px solid var(--border-light) !important;
+  }
+  .pulse-file-tools::-webkit-scrollbar {
+    display: none !important;
+  }
+  .pulse-file-tools .btn {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    height: 30px !important;
+    padding: 0 10px !important;
+    font-size: 11.5px !important;
+    border-radius: 999px !important;
+  }
+  .pulse-file-tools .pulse-file-path {
+    display: none !important;
+  }
+
+  /* 4. Desktop Windows on Mobile */
+  #view-desktop .desktop-window {
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: calc(100% - 76px - env(safe-area-inset-bottom, 0px)) !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    border-radius: 0 !important;
+  }
+  #win-photos, #win-clipboard, #win-cam, #win-notes, #win-editor,
+  #win-terminal, #win-finder, #win-calculator, #win-music, #win-stickies,
+  #win-settings, #win-about, #win-trash, #win-browser, #win-linux {
+    min-width: 0 !important;
+  }
+
+  /* Traffic light buttons: hide maximize on mobile */
+  .traffic-light.btn-max {
+    display: none !important;
+  }
+
+  /* Window header layout */
+  .window-header {
+    height: 38px !important;
+    min-height: 38px !important;
+    padding: 0 8px !important;
+    gap: 6px !important;
+  }
+  .window-title {
+    font-size: 12px !important;
+    max-width: 120px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+  .window-header-actions {
+    min-width: 0 !important;
+    gap: 4px !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  .win-btn-sm {
+    font-size: 11px !important;
+    padding: 3px 6px !important;
+    height: 24px !important;
+    white-space: nowrap !important;
+  }
+
+  /* 5. Desktop Menubar */
+  .desktop-menubar {
+    padding: 0 8px !important;
+    height: 32px !important;
+  }
+  .menubar-left {
+    gap: 6px !important;
+    min-width: 0 !important;
+    flex-shrink: 1 !important;
+  }
+  .menubar-menus, #menubar-ip-badge, #menubar-battery-badge,
+  #btn-desktop-mission, #btn-desktop-fullscreen {
+    display: none !important;
+  }
+  .menubar-app-title {
+    font-size: 12px !important;
+    white-space: nowrap !important;
+    max-width: 75px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  .menubar-right {
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+  }
+  .menubar-focus-timer {
+    display: none !important;
+  }
+  .menubar-icon-btn {
+    padding: 2px !important;
+    width: 26px !important;
+    height: 26px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* 6. Desktop Dock on Mobile */
+  .desktop-dock-wrap {
+    bottom: env(safe-area-inset-bottom, 6px) !important;
+    width: 100% !important;
+    padding: 0 8px !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    justify-content: center !important;
+  }
+  .desktop-dock {
+    width: auto !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    justify-content: flex-start !important;
+    gap: 6px !important;
+    padding: 6px 8px !important;
+    border-radius: 18px !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+  .desktop-dock::-webkit-scrollbar {
+    display: none !important;
+  }
+  .dock-item {
+    flex: 0 0 38px !important;
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 10px !important;
+  }
+  .dock-icon {
+    font-size: 19px !important;
+  }
+  .dock-icon svg {
+    width: 20px !important;
+    height: 20px !important;
+  }
+  .dock-divider {
+    flex-shrink: 0 !important;
+    margin: 0 2px !important;
+    height: 24px !important;
+  }
+
+  /* 7. Specific App Windows on Mobile */
+  /* Finder */
+  .finder-sidebar {
+    width: 78px !important;
+    min-width: 70px !important;
+    padding: 6px 2px !important;
+    flex-shrink: 0 !important;
+  }
+  .finder-nav-item {
+    padding: 8px 4px !important;
+    font-size: 10.5px !important;
+  }
+  .finder-content {
+    min-width: 0 !important;
+    padding: 8px !important;
+  }
+
+  /* Pulse Photos */
+  .photos-sidebar {
+    width: 85px !important;
+    min-width: 75px !important;
+    padding: 6px 3px !important;
+  }
+  .photos-nav-item {
+    padding: 6px 4px !important;
+    font-size: 11px !important;
+  }
+  .photos-thumb-grid {
+    grid-template-columns: repeat(auto-fill, minmax(75px, 1fr)) !important;
+    gap: 3px !important;
+  }
+
+  /* Pulse Cam */
+  .cam-topbar {
+    padding: 5px 8px !important;
+    gap: 4px !important;
+    flex-wrap: nowrap !important;
+  }
+  .cam-controls-left {
+    gap: 4px !important;
+    min-width: 0 !important;
+    flex: 1 !important;
+  }
+  .cam-select {
+    max-width: 98px !important;
+    font-size: 10px !important;
+    padding: 2px 4px !important;
+  }
+  .cam-bottom-bar {
+    padding: 8px 10px !important;
+    gap: 6px !important;
+  }
+  .cam-action-btn {
+    font-size: 11px !important;
+    padding: 5px 8px !important;
+    white-space: nowrap !important;
+  }
+  .cam-capture-btn {
+    font-size: 11.5px !important;
+    padding: 6px 10px !important;
+    white-space: nowrap !important;
+  }
+
+  /* Stickies */
+  .sticky-actions {
+    gap: 3px !important;
+  }
+  .sticky-color-dot {
+    width: 13px !important;
+    height: 13px !important;
+  }
+  .sticky-actions .win-btn-sm {
+    padding: 2px 5px !important;
+    font-size: 10px !important;
+  }
+
+  /* Notes */
+  .notes-sidebar {
+    width: 105px !important;
+    min-width: 90px !important;
+  }
+  .note-actions .win-btn-sm {
+    padding: 2px 6px !important;
+    font-size: 11px !important;
+  }
 }
 
 
