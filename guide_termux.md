@@ -134,6 +134,7 @@ termux-cloud status
 - 출력되는 `외부(인터넷): https://xxxxxx.trycloudflare.com (Cloudflare Tunnel)` 주소로 어디서든 브라우저로 접속하세요!
 - 터널만 따로 켜고 끄기: `termux-cloud tunnel start --bg` / `termux-cloud tunnel stop`
 - 서버 종료 시 (`termux-cloud stop`) 터널도 자동으로 함께 안전하게 종료됩니다.
+- **최신 코드 업데이트 + 서버/터널 원클릭 재시작**: `termux-cloud sync` (또는 `termux-cloud update --tunnel`)
 
 ### 2) Tailscale (개인 기기 간 안전한 가상 사설망)
 1. 구글 플레이스토어에서 갤럭시 폰과 접속할 노트북/폰에 **Tailscale** 앱 설치

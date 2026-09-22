@@ -48,9 +48,25 @@ sleep 1
 
 # 새 서버 재시작
 echo -e "\n${GREEN}[✓] 업데이트 완료! 최신 버전으로 서버를 다시 시작합니다...${NC}"
-if [ "$#" -eq 0 ]; then
-    ./start.sh --bg
-else
-    ./start.sh "$@"
+
+START_ARGS=()
+HAS_BG=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --bg|-d|background)
+            HAS_BG=true
+            START_ARGS+=("$arg")
+            ;;
+        *)
+            START_ARGS+=("$arg")
+            ;;
+    esac
+done
+
+if [ "$HAS_BG" = false ]; then
+    START_ARGS=("--bg" "${START_ARGS[@]}")
 fi
+
+./start.sh "${START_ARGS[@]}"
 

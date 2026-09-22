@@ -12,6 +12,7 @@ Pulse (Pulse Cloud & Pulse OS) 공식 버전별 변경 이력입니다.
   - `termux-cloud --bg --tunnel`: Pulse 서버와 Cloudflare Tunnel 동시 백그라운드 구동.
   - `termux-cloud tunnel status` / `stop`: 터널 상태 확인 및 프로세스 안전 종료.
   - `termux-cloud stop` 시 연계된 터널 프로세스 자동 종료 지원.
+  - `termux-cloud sync` (또는 `termux-cloud update --tunnel`): GitHub 최신 코드 자동 업데이트 + 의존성 갱신 + 서버 및 외부 터널 동시 백그라운드 원클릭 재시작.
 - **고정 도메인 지원**: 개인 도메인이 있는 경우 `CLOUDFLARE_TUNNEL_TOKEN` 환경변수 또는 `--token` 옵션으로 영구 고정 도메인 연결 지원.
 - **상태 모니터링 연동**:
   - `termux-cloud status`: 외부 인터넷 HTTPS 접속 주소 명확히 출력.

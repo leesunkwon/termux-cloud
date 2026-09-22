@@ -20,6 +20,8 @@ Pulse 전역 명령어
   termux-cloud logs            최근 로그 50줄
   termux-cloud logs -f         로그 실시간 보기 (Ctrl+C로 보기 종료)
   termux-cloud update [옵션]   Git 업데이트 후 재시작 (기본 백그라운드)
+  termux-cloud update --tunnel Git 업데이트 후 서버 + 외부 터널 동시 백그라운드 시작
+  termux-cloud sync            update --tunnel과 동일 (업데이트 + 서버 + 터널 원클릭)
   termux-cloud register       전역 명령어 재등록
   termux-cloud path           프로젝트 경로
   termux-cloud help           도움말
@@ -80,8 +82,10 @@ case "$ACTION" in
         exec bash "$SCRIPT_DIR/start.sh" "$@"
         ;;
     update)
-        if [ "$#" -eq 0 ]; then set -- --bg; fi
         exec bash "$SCRIPT_DIR/update.sh" "$@"
+        ;;
+    sync|up)
+        exec bash "$SCRIPT_DIR/update.sh" --tunnel "$@"
         ;;
     logs)
         if [ ! -f "$SCRIPT_DIR/server.log" ]; then

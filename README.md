@@ -59,6 +59,8 @@ termux-cloud status      # 서버 상태·접속 주소(로컬/외부)·최근 �
 termux-cloud stop        # 서버 및 터널 종료
 termux-cloud restart     # 백그라운드 재시작 (계정 변경 후 실행)
 termux-cloud update      # 최신 코드 다운로드 후 백그라운드 재시작
+termux-cloud update --tunnel # 최신 코드 다운로드 후 서버 + 터널 동시 백그라운드 재시작
+termux-cloud sync        # update --tunnel과 동일 (업데이트 + 서버 + 터널 원클릭)
 termux-cloud logs -f     # 실시간 로그 (Ctrl+C로 로그 보기만 종료)
 termux-cloud help        # 전체 명령어 확인
 ```
