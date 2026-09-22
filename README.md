@@ -1,9 +1,10 @@
 # ⚡ Pulse — 스마트폰 개인 클라우드와 웹 데스크톱
 
 Pulse는 남는 안드로이드 스마트폰을 Termux에서 개인 서버로 사용하는 프로젝트입니다.
-현재 버전은 **v2.5.0**입니다. Python/Flask 단일 서버가 Pulse Cloud와 Pulse OS를 제공합니다.
+현재 버전은 **v2.6.0**입니다. Python/Flask 단일 서버가 Pulse Cloud와 Pulse OS를 제공합니다.
 
-> **v2.5.0 신규**: ☁️ **Cloudflare Tunnel 원클릭 외부 접속** (스마트폰 LTE/5G 데이터 환경에서도 전 세계 어디서든 브라우저로 접속, `termux-cloud tunnel` 지원)  
+> **v2.6.0 신규**: ⚡ **Pulse API Studio (나만의 API 서비스 & 링크 생성기)** (시작 화면과 웹 데스크톱에서 나만의 커스텀 REST API/웹훅을 직접 설계하고 외부 Cloudflare 및 로컬 전용 링크를 즉시 발급·테스트, JSON Mock / Python 서버리스 / 스마트폰 디바이스 모드 지원)  
+> **v2.5.0**: ☁️ **Cloudflare Tunnel 원클릭 외부 접속** (스마트폰 LTE/5G 데이터 환경에서도 전 세계 어디서든 브라우저로 접속, `termux-cloud tunnel` 지원)  
 > **v2.4.0**: 📷 Pulse Cam (스마트폰 원격 홈캠 / CCTV 실시간 모니터 및 `uploads/Camera/` 스냅샷 보관)  
 > **v2.3.0**: 📋 Clipboard 히스토리, 🔖 즐겨찾기 & 7색 태그, 🔗 안전 파일 공유 링크 생성 (`/s/<id>`), 🌙 Focus Mode (방해 금지 & 뽀모도로 타이머)  
 > **v2.2.0**: 📸 Pulse Photos, 📦 ZIP 압축/해제, 🗓️ Calendar 위젯, ⌨️ 단축키 치트시트
@@ -136,6 +137,7 @@ python3 -m pip install Pillow  # 선택 사항. Termux에서는 빌드 의존성
 
 ## Pulse OS (가상 웹 데스크톱)
 
+- **⚡ Pulse API Studio (나만의 API 서비스 & 웹훅 엔진)**: 나만의 REST 엔드포인트(`/api/fn/<이름>`)를 시각적으로 직접 설계하고, 외부(Cloudflare) 및 로컬 호출 고유 링크를 즉시 발급·공유. JSON Mock, Python 서버리스 연산, 스마트폰 하드웨어 연동 모드와 실시간 인스턴트 테스터 제공.
 - **📷 Pulse Cam (스마트폰 원격 홈캠 / CCTV)**: 스마트폰 카메라를 활용한 실시간 원격 영상 모니터링 창, CCTV OSD 오버레이, 스냅샷 캡처 시 `uploads/Camera/` 폴더에 즉시 저장.
 - **📸 Pulse Photos**: 날짜별(월별) 사진 갤러리, 전체화면 라이트박스 및 슬라이드쇼.
 - **📋 Clipboard 히스토리**: 복사한 텍스트 실시간 감지 및 영구 저장, 핀 고정 및 검색.

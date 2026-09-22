@@ -2,6 +2,34 @@
 
 Pulse (Pulse Cloud & Pulse OS) 공식 버전별 변경 이력입니다.
 
+## [v2.6.0] - 2026-09-22
+### ⚡ Pulse API Studio (나만의 API 서비스 & 링크 생성기)
+
+#### 1. ⚡ Pulse API Studio 가상 웹 데스크톱 & 시작 화면 탑재
+- **시작 화면(Portal)**: 4번째 메인 선택 카드로 `API 서비스 (Pulse API Studio)` 추가, 가동 중인 엔드포인트 개수 실시간 요약 표시 및 1클릭 실행 지원.
+- **Pulse OS 통합**: 데스크톱 바로가기 아이콘, 플로팅 Dock 아이콘(⚡), Spotlight 검색(`api`, `apis`, `studio`, `webhook`, `웹훅`, `함수`, `serverless`, `rest`, `endpoint`) 등록.
+- **Apple HIG 2열 윈도우 UI**: 좌측 API 엔드포인트 목록 및 실시간 검색 사이드바 + 우측 엔드포인트 설계 에디터 및 링크 발급/인스턴트 테스터 패널.
+
+#### 2. 🔗 고유 링크 즉시 발급 & 원클릭 공유 (Local & Cloudflare Tunnel)
+- **외부 인터넷 링크 자동 생성**: Cloudflare Tunnel이 활성화되어 있을 경우 전 세계 어디서든 호출할 수 있는 `https://<tunnel-domain>/api/fn/<name>` 고유 URL 자동 계산 및 1클릭 복사/열기.
+- **로컬 Wi-Fi 링크 자동 생성**: 동일 네트워크에서 호출할 수 있는 `http://<phone-ip>:3000/api/fn/<name>` URL 제공.
+- **cURL 명령어 자동 생성**: 선택된 HTTP 메소드, 인증 헤더, JSON 페이로드에 맞춰 터미널에서 즉시 실행 가능한 `curl` 명령어 1클릭 복사.
+
+#### 3. 🛠️ 3대 처리 엔진 (Engine Modes)
+- **📄 JSON Mock 모드**: 고정된 JSON 데이터를 1초 만에 반환 (외부 웹훅 테스트, 프론트엔드 목업용).
+- **🐍 Python 서버리스 모드 (Micro-Serverless)**: `def handle(req):` 함수를 작성하여 `req['params']`, `req['body']`, `req['method']`를 받아 파이썬 코드로 동적 연산 후 딕셔너리 반환.
+- **📱 스마트폰 디바이스 모드**: 호출 시 스마트폰 배터리 잔량/충전 상태, 저장공간 여유량, 시스템 사양, 하트비트 핑을 실시간 측정하여 반환.
+
+#### 4. 🛡️ 유연한 접근 제어 & 실시간 인스턴트 테스터
+- **인증 권한 3단계**:
+  - `public`: 외부 웹훅(GitHub, Slack, Notion 등)에서 로그인 쿠키 없이 자유롭게 호출 가능 (CORS `*` 헤더 기본 탑재).
+  - `key`: 헤더 `X-API-Key` 또는 쿼리 `?key=` 로 비밀 키 인증 (랜덤 키 자동 생성기 내장).
+  - `private`: Pulse 로그인 세션 사용자 전용 엔드포인트.
+- **인스턴트 테스터 (Test Run)**: 창 내부에서 쿼리 스트링 및 JSON 본문을 입력하고 [요청 전송]을 누르면 상태 코드(`200 OK`), 지연 시간(`ms`), 응답 본문(JSON 컬러 뷰어)을 실시간 확인.
+- **호출 통계**: 엔드포인트별 누적 호출 횟수 및 최근 호출 일시 자동 기록.
+
+---
+
 ## [v2.5.0] - 2026-09-22
 ### 🚀 Cloudflare Tunnel 원클릭 외부 접속 & 반응형 모바일 UI 개편
 

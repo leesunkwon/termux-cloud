@@ -71,8 +71,10 @@
     portalCardCloud: document.getElementById('portal-card-cloud'),
     portalCardDesktop: document.getElementById('portal-card-desktop'),
     portalCardDashboard: document.getElementById('portal-card-dashboard'),
+    portalCardApi: document.getElementById('portal-card-api'),
     portalFilesSummary: document.getElementById('portal-files-summary'),
     portalUptimeSummary: document.getElementById('portal-uptime-summary'),
+    portalApiSummary: document.getElementById('portal-api-summary'),
     portalIpVal: document.getElementById('portal-ip-val'),
     portalVerVal: document.getElementById('portal-ver-val'),
     portalUpdateStatus: document.getElementById('portal-update-status'),
@@ -221,6 +223,8 @@
     initTagFilterListeners();
     // v2.4.0 신규 기능 초기화
     initPulseCam();
+    // v2.6.0 Pulse API Studio 초기화
+    initApiStudio();
 
     // Initial Hash Routing or Default to Portal
     const hash = window.location.hash.replace('#', '');
@@ -306,6 +310,10 @@
     if (state.dashboardData && el.portalIpVal) {
       el.portalIpVal.textContent = state.dashboardData.network.localIp + ':' + state.dashboardData.network.port;
     }
+    if (el.portalApiSummary) {
+      const apiCount = state.customApis ? state.customApis.length : 3;
+      el.portalApiSummary.textContent = `${apiCount}개 API 엔드포인트 가동 중`;
+    }
   }
 
   // ================= Event Listeners =================
@@ -330,6 +338,12 @@
     }
     if (el.portalCardDashboard) {
       el.portalCardDashboard.addEventListener('click', () => switchAppView('dashboard'));
+    }
+    if (el.portalCardApi) {
+      el.portalCardApi.addEventListener('click', () => {
+        switchAppView('desktop');
+        openDesktopWindow('api');
+      });
     }
     if (el.portalChangelogBtn) {
       el.portalChangelogBtn.addEventListener('click', openChangelogModal);
@@ -2637,6 +2651,7 @@
         else if (appId === 'photos') { win.style.width = '820px'; win.style.height = '520px'; }
         else if (appId === 'clipboard') { win.style.width = '420px'; win.style.height = '500px'; }
         else if (appId === 'cam') { win.style.width = '620px'; win.style.height = '510px'; }
+        else if (appId === 'api') { win.style.width = '840px'; win.style.height = '540px'; }
       }
       win.dataset.positioned = 'true';
     }
@@ -2673,6 +2688,8 @@
       renderClipboardHistory();
     } else if (appId === 'cam') {
       startPulseCam();
+    } else if (appId === 'api') {
+      if (typeof loadCustomApis === 'function') loadCustomApis();
     }
   }
 
@@ -3891,6 +3908,7 @@
         { id: 'photos', name: 'Pulse Photos', en: 'photos gallery image picture camera', icon: '📸', desc: '날짜별 사진 갤러리' },
         { id: 'clipboard', name: '클립보드 히스토리', en: 'clipboard clip history copy paste', icon: '📋', desc: '복사한 텍스트 기록 및 핀 보관함' },
         { id: 'cam', name: 'Pulse Cam', en: 'cam camera cctv homecam webcam 홈캠 카메라', icon: '📷', desc: '스마트폰 원격 홈캠 / CCTV 모니터' },
+        { id: 'api', name: 'API 서비스 (Studio)', en: 'api apis studio webhook 웹훅 함수 serverless rest endpoint 커스텀', icon: '⚡', desc: '나만의 API 직접 설계 및 링크 발급' },
         { id: 'monitor', name: 'Pulse 모니터', en: 'monitor activity resource cpu ram', icon: '📊', desc: '시스템 리소스 실시간 모니터' },
         { id: 'browser', name: 'Pulse 브라우저', en: 'browser web net', icon: '🌐', desc: '웹 사이트 브라우저' },
         { id: 'linux', name: 'Linux 데스크톱', en: 'linux vnc gui xfce desktop', icon: '🐧', desc: 'Termux XFCE4 GUI', admin: true },
@@ -6695,6 +6713,643 @@
     if (btnCapture) {
       btnCapture.addEventListener('click', takePulseCamSnapshot);
     }
+  }
+
+  // ==============================================================================
+  // ⚡ Pulse API Studio (v2.6.0)
+  // ==============================================================================
+  function initApiStudio() {
+    const listEl = document.getElementById('api-list');
+    const searchInput = document.getElementById('api-search-input');
+    const emptyView = document.getElementById('api-empty-view');
+    const editorContent = document.getElementById('api-editor-content');
+    const btnNew = document.getElementById('btn-api-new');
+    const btnEmptyCreate = document.getElementById('btn-api-empty-create');
+    const btnRefresh = document.getElementById('btn-api-refresh');
+    const btnSave = document.getElementById('btn-api-save');
+    const btnDelete = document.getElementById('btn-api-delete');
+    const statusPill = document.getElementById('api-view-status-pill');
+    const tunnelIndicator = document.getElementById('api-tunnel-indicator');
+    const countText = document.getElementById('api-count-text');
+    const btnDocs = document.getElementById('btn-api-docs');
+
+    // Inputs
+    const inputName = document.getElementById('api-input-name');
+    const inputPath = document.getElementById('api-input-path');
+    const inputMethod = document.getElementById('api-input-method');
+    const inputAuth = document.getElementById('api-input-auth');
+    const inputApiKey = document.getElementById('api-input-apikey');
+    const keyContainer = document.getElementById('api-key-container');
+    const btnGenApiKey = document.getElementById('btn-gen-apikey');
+    const inputStatusCode = document.getElementById('api-input-statuscode');
+    const modeRadios = document.querySelectorAll('input[name="api-mode-radio"]');
+    const paneJson = document.getElementById('editor-pane-json');
+    const panePython = document.getElementById('editor-pane-python');
+    const paneDevice = document.getElementById('editor-pane-device');
+    const textareaJson = document.getElementById('api-textarea-json');
+    const textareaPython = document.getElementById('api-textarea-python');
+    const selectDeviceAction = document.getElementById('api-select-device-action');
+    const btnFormatJson = document.getElementById('btn-format-json');
+
+    // Links
+    const linkTunnelUrl = document.getElementById('api-link-tunnel-url');
+    const linkLocalUrl = document.getElementById('api-link-local-url');
+    const btnCopyTunnel = document.getElementById('btn-copy-tunnel-url');
+    const btnOpenTunnel = document.getElementById('btn-open-tunnel-url');
+    const btnCopyLocal = document.getElementById('btn-copy-local-url');
+    const btnOpenLocal = document.getElementById('btn-open-local-url');
+    const curlCode = document.getElementById('api-curl-text');
+    const btnCopyCurl = document.getElementById('btn-copy-curl');
+
+    // Subtabs
+    const subtabBtns = document.querySelectorAll('.api-subtab-btn');
+    const paneDesign = document.getElementById('pane-api-design');
+    const paneTester = document.getElementById('pane-api-tester');
+
+    // Tester
+    const testerMethodBadge = document.getElementById('tester-method-badge');
+    const testerUrlInput = document.getElementById('tester-url-input');
+    const testerQueryInput = document.getElementById('tester-query-input');
+    const testerBodyBox = document.getElementById('tester-body-box');
+    const testerBodyInput = document.getElementById('tester-body-input');
+    const btnTesterSend = document.getElementById('btn-tester-send');
+    const testerSendLabel = document.getElementById('tester-send-label');
+    const testerResStatus = document.getElementById('tester-res-status');
+    const testerResTime = document.getElementById('tester-res-time');
+    const testerOutputPre = document.getElementById('tester-output-pre');
+
+    // Statusbar
+    const statusInfo = document.getElementById('api-status-info');
+    const callsInfo = document.getElementById('api-calls-info');
+
+    let currentApis = [];
+    let activeApiId = null;
+    let tunnelHostUrl = null;
+
+    window.loadCustomApis = async function(preferredId) {
+      try {
+        const res = await fetch('/api/custom-apis');
+        const data = await res.json();
+        if (data.success) {
+          currentApis = data.apis || [];
+          state.customApis = currentApis;
+          tunnelHostUrl = data.tunnelUrl || null;
+
+          // Update tunnel chip
+          if (tunnelIndicator) {
+            if (tunnelHostUrl) {
+              tunnelIndicator.textContent = 'Cloudflare 터널 활성';
+              tunnelIndicator.classList.add('online');
+            } else {
+              tunnelIndicator.textContent = '로컬 Wi-Fi 모드';
+              tunnelIndicator.classList.remove('online');
+            }
+          }
+
+          // Update count
+          if (countText) countText.textContent = `${currentApis.length}개 엔드포인트`;
+          if (el.portalApiSummary) {
+            el.portalApiSummary.textContent = `${currentApis.length}개 API 엔드포인트 가동 중`;
+          }
+
+          // Update total calls in statusbar
+          const totalCalls = currentApis.reduce((acc, cur) => acc + (cur.calls || 0), 0);
+          if (callsInfo) callsInfo.textContent = `총 ${totalCalls}회 호출됨`;
+
+          renderList(searchInput ? searchInput.value.trim() : '');
+
+          const targetId = preferredId || activeApiId;
+          if (targetId && currentApis.some(a => a.id === targetId)) {
+            selectApi(targetId);
+          } else if (currentApis.length > 0) {
+            selectApi(currentApis[0].id);
+          } else {
+            activeApiId = null;
+            if (emptyView) emptyView.classList.remove('hidden');
+            if (editorContent) editorContent.classList.add('hidden');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load custom APIs:', err);
+      }
+    };
+
+    function renderList(query = '') {
+      if (!listEl) return;
+      listEl.innerHTML = '';
+      const q = query.toLowerCase();
+      const filtered = currentApis.filter(a => {
+        if (!q) return true;
+        return (a.name || '').toLowerCase().includes(q) ||
+               (a.path || '').toLowerCase().includes(q) ||
+               (a.method || '').toLowerCase().includes(q) ||
+               (a.mode || '').toLowerCase().includes(q);
+      });
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px;">일치하는 API가 없습니다.</div>';
+        return;
+      }
+
+      filtered.forEach(api => {
+        const item = document.createElement('div');
+        item.className = `api-item-card ${api.id === activeApiId ? 'active' : ''}`;
+        const methodClass = `method-${(api.method || 'get').toLowerCase()}`;
+        const authLabel = api.auth === 'public' ? '공개' : api.auth === 'key' ? 'Key' : '비공개';
+
+        item.innerHTML = `
+          <div class="api-item-top">
+            <span class="api-method-badge ${methodClass}">${api.method || 'GET'}</span>
+            <span class="api-item-path">/api/fn/${escapeHtml(api.path)}</span>
+          </div>
+          <div class="api-item-name">${escapeHtml(api.name || '새 API')}</div>
+          <div class="api-item-meta">
+            <span><span class="api-status-dot ${api.enabled ? 'active' : 'disabled'}"></span>${api.enabled ? '활성' : '비활성'} · ${authLabel}</span>
+            <span>${api.calls || 0}회</span>
+          </div>
+        `;
+
+        item.addEventListener('click', () => selectApi(api.id));
+        listEl.appendChild(item);
+      });
+    }
+
+    function selectApi(apiId) {
+      activeApiId = apiId;
+      const api = currentApis.find(a => a.id === apiId);
+      if (!api) return;
+
+      if (emptyView) emptyView.classList.add('hidden');
+      if (editorContent) editorContent.classList.remove('hidden');
+
+      // Update active card in list
+      if (listEl) {
+        const cards = listEl.querySelectorAll('.api-item-card');
+        const filtered = currentApis.filter(a => {
+          const q = searchInput ? searchInput.value.trim().toLowerCase() : '';
+          if (!q) return true;
+          return (a.name || '').toLowerCase().includes(q) ||
+                 (a.path || '').toLowerCase().includes(q) ||
+                 (a.method || '').toLowerCase().includes(q) ||
+                 (a.mode || '').toLowerCase().includes(q);
+        });
+        cards.forEach((cardEl, idx) => {
+          cardEl.classList.toggle('active', filtered[idx] && filtered[idx].id === apiId);
+        });
+      }
+
+      // Header Topbar
+      const viewMethodBadge = document.getElementById('api-view-method-badge');
+      const viewPath = document.getElementById('api-view-path');
+      if (viewMethodBadge) {
+        viewMethodBadge.textContent = api.method || 'GET';
+        viewMethodBadge.className = `api-method-badge method-${(api.method || 'get').toLowerCase()}`;
+      }
+      if (viewPath) viewPath.textContent = api.path || '';
+      if (statusPill) {
+        statusPill.textContent = api.enabled ? '활성' : '비활성';
+        statusPill.className = `api-status-pill ${api.enabled ? 'pill-active' : 'pill-inactive'}`;
+      }
+
+      // Links
+      const localUrl = `${location.protocol}//${location.host}/api/fn/${api.path}`;
+      const tunnelUrl = tunnelHostUrl ? `${tunnelHostUrl}/api/fn/${api.path}` : '';
+      if (linkLocalUrl) linkLocalUrl.value = localUrl;
+      if (btnOpenLocal) btnOpenLocal.href = localUrl;
+
+      if (linkTunnelUrl) {
+        linkTunnelUrl.value = tunnelUrl;
+        if (!tunnelUrl) {
+          linkTunnelUrl.placeholder = '터널 가동 시 자동 발급 (termux-cloud --bg)';
+        }
+      }
+      if (btnOpenTunnel) {
+        if (tunnelUrl) {
+          btnOpenTunnel.href = tunnelUrl;
+          btnOpenTunnel.style.display = 'inline-flex';
+        } else {
+          btnOpenTunnel.style.display = 'none';
+        }
+      }
+
+      // cURL Command
+      const effectiveUrl = tunnelUrl || localUrl;
+      let curlCmd = `curl -X ${api.method || 'GET'} "${effectiveUrl}"`;
+      if (api.auth === 'key') {
+        curlCmd += ` -H "X-API-Key: ${api.apiKey || 'YOUR_API_KEY'}"`;
+      }
+      if (api.mode === 'json' && ['POST', 'PUT', 'PATCH'].includes(api.method)) {
+        const bodyContent = (api.jsonBody || '{}').replace(/\n/g, ' ').replace(/"/g, '\\"');
+        curlCmd += ` -H "Content-Type: application/json" -d "${bodyContent}"`;
+      }
+      if (curlCode) curlCode.textContent = curlCmd;
+
+      // Inputs
+      if (inputName) inputName.value = api.name || '';
+      if (inputPath) inputPath.value = api.path || '';
+      if (inputMethod) inputMethod.value = api.method || 'GET';
+      if (inputAuth) {
+        inputAuth.value = api.auth || 'public';
+        if (keyContainer) keyContainer.classList.toggle('hidden', inputAuth.value !== 'key');
+      }
+      if (inputApiKey) inputApiKey.value = api.apiKey || '';
+      if (inputStatusCode) inputStatusCode.value = String(api.statusCode || 200);
+
+      // Mode
+      const currentMode = api.mode || 'json';
+      modeRadios.forEach(radio => {
+        radio.checked = radio.value === currentMode;
+        const card = radio.closest('.api-mode-card');
+        if (card) card.classList.toggle('selected', radio.checked);
+      });
+      showModeEditor(currentMode);
+
+      if (textareaJson) textareaJson.value = api.jsonBody || '{\n  "message": "Hello from Pulse API"\n}';
+      if (textareaPython) textareaPython.value = api.pythonCode || "def handle(req):\n    name = req.get('params', {}).get('name', 'World')\n    return {'message': f'Hello, {name}!'}\n";
+      if (selectDeviceAction) selectDeviceAction.value = api.deviceAction || 'battery';
+
+      // Tester Sync
+      if (testerMethodBadge) {
+        testerMethodBadge.textContent = api.method || 'GET';
+        testerMethodBadge.className = `api-method-badge method-${(api.method || 'get').toLowerCase()}`;
+      }
+      if (testerUrlInput) testerUrlInput.value = localUrl;
+      if (testerBodyBox) {
+        testerBodyBox.classList.toggle('hidden', ['GET', 'DELETE'].includes(api.method));
+      }
+      if (testerBodyInput) {
+        testerBodyInput.value = api.jsonBody || '{\n  "test": true\n}';
+      }
+      if (testerResStatus) {
+        testerResStatus.textContent = '응답 대기';
+        testerResStatus.className = 'api-res-badge';
+      }
+      if (testerResTime) testerResTime.textContent = '0 ms';
+      if (testerOutputPre) {
+        testerOutputPre.textContent = '// [요청 전송] 버튼을 누르면 실시간 응답이 여기에 표시됩니다.';
+      }
+
+      // Statusbar
+      if (statusInfo) statusInfo.textContent = `엔드포인트: /api/fn/${api.path} · ${currentMode.toUpperCase()} 엔진`;
+      if (callsInfo) callsInfo.textContent = `이 API ${api.calls || 0}회 호출됨 (최근: ${api.lastCalled ? api.lastCalled.split('T')[1].slice(0, 5) : '기록 없음'})`;
+    }
+
+    function showModeEditor(mode) {
+      if (paneJson) paneJson.classList.toggle('hidden', mode !== 'json');
+      if (panePython) panePython.classList.toggle('hidden', mode !== 'python');
+      if (paneDevice) paneDevice.classList.toggle('hidden', mode !== 'device');
+    }
+
+    function createNewApi() {
+      activeApiId = null;
+      if (emptyView) emptyView.classList.add('hidden');
+      if (editorContent) editorContent.classList.remove('hidden');
+
+      const randNum = Math.floor(Math.random() * 9000 + 1000);
+      const defaultPath = `my-api-${randNum}`;
+
+      if (inputName) inputName.value = '새 API 서비스';
+      if (inputPath) inputPath.value = defaultPath;
+      if (inputMethod) inputMethod.value = 'GET';
+      if (inputAuth) {
+        inputAuth.value = 'public';
+        if (keyContainer) keyContainer.classList.add('hidden');
+      }
+      if (inputApiKey) inputApiKey.value = '';
+      if (inputStatusCode) inputStatusCode.value = '200';
+
+      modeRadios.forEach(radio => {
+        radio.checked = radio.value === 'json';
+        const card = radio.closest('.api-mode-card');
+        if (card) card.classList.toggle('selected', radio.value === 'json');
+      });
+      showModeEditor('json');
+
+      if (textareaJson) textareaJson.value = '{\n  "success": true,\n  "message": "나만의 API가 정상 작동합니다!",\n  "version": "1.0.0"\n}';
+      if (textareaPython) textareaPython.value = "def handle(req):\n    # req['params'], req['body'], req['method'] 활용 가능\n    return {\n        'status': 'ok',\n        'time': req.get('time')\n    }\n";
+      if (selectDeviceAction) selectDeviceAction.value = 'battery';
+
+      // Header Topbar
+      const viewMethodBadge = document.getElementById('api-view-method-badge');
+      const viewPath = document.getElementById('api-view-path');
+      if (viewMethodBadge) {
+        viewMethodBadge.textContent = 'GET';
+        viewMethodBadge.className = 'api-method-badge method-get';
+      }
+      if (viewPath) viewPath.textContent = defaultPath;
+      if (statusPill) {
+        statusPill.textContent = '신규';
+        statusPill.className = 'api-status-pill pill-active';
+      }
+
+      // Links preview
+      const localUrl = `${location.protocol}//${location.host}/api/fn/${defaultPath}`;
+      if (linkLocalUrl) linkLocalUrl.value = localUrl;
+      if (linkTunnelUrl) linkTunnelUrl.value = tunnelHostUrl ? `${tunnelHostUrl}/api/fn/${defaultPath}` : '';
+      if (curlCode) curlCode.textContent = `curl -X GET "${tunnelHostUrl ? `${tunnelHostUrl}/api/fn/${defaultPath}` : localUrl}"`;
+
+      if (inputName) inputName.focus();
+    }
+
+    async function saveApi() {
+      const name = inputName ? inputName.value.trim() : '';
+      const path = inputPath ? inputPath.value.trim() : '';
+      if (!name) {
+        showToast('API 이름을 입력하세요.');
+        if (inputName) inputName.focus();
+        return;
+      }
+      if (!path) {
+        showToast('엔드포인트 경로를 입력하세요.');
+        if (inputPath) inputPath.focus();
+        return;
+      }
+
+      const method = inputMethod ? inputMethod.value : 'GET';
+      const auth = inputAuth ? inputAuth.value : 'public';
+      const apiKey = inputApiKey ? inputApiKey.value.trim() : '';
+      const statusCode = parseInt(inputStatusCode ? inputStatusCode.value : '200', 10) || 200;
+      const selectedRadio = document.querySelector('input[name="api-mode-radio"]:checked');
+      const mode = selectedRadio ? selectedRadio.value : 'json';
+      const jsonBody = textareaJson ? textareaJson.value : '{}';
+      const pythonCode = textareaPython ? textareaPython.value : '';
+      const deviceAction = selectDeviceAction ? selectDeviceAction.value : 'battery';
+
+      if (mode === 'json') {
+        try {
+          JSON.parse(jsonBody);
+        } catch (e) {
+          showToast('JSON 응답 본문에 문법 오류가 있습니다.');
+          return;
+        }
+      }
+
+      const payload = {
+        id: activeApiId || '',
+        name,
+        path,
+        method,
+        auth,
+        apiKey,
+        statusCode,
+        mode,
+        jsonBody,
+        pythonCode,
+        deviceAction,
+        enabled: true
+      };
+
+      try {
+        if (btnSave) btnSave.disabled = true;
+        const res = await fetch('/api/custom-apis', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if (result.success) {
+          showToast(`API '${name}'(/api/fn/${result.api.path})가 저장되었습니다.`);
+          await window.loadCustomApis(result.api.id);
+        } else {
+          showToast(result.error || '저장에 실패했습니다.');
+        }
+      } catch (err) {
+        showToast('서버 통신 실패: ' + err.message);
+      } finally {
+        if (btnSave) btnSave.disabled = false;
+      }
+    }
+
+    async function deleteApi() {
+      if (!activeApiId) return;
+      const api = currentApis.find(a => a.id === activeApiId);
+      if (!api) return;
+
+      const confirmed = await Pulse.ask(`API '/api/fn/${api.path}'을(를) 완전히 삭제하시겠습니까?`, { confirm: '삭제' });
+      if (!confirmed) return;
+
+      try {
+        const res = await fetch(`/api/custom-apis/${activeApiId}`, { method: 'DELETE' });
+        const result = await res.json();
+        if (result.success) {
+          showToast('API 엔드포인트를 삭제했습니다.');
+          activeApiId = null;
+          await window.loadCustomApis();
+        } else {
+          showToast(result.error || '삭제 실패');
+        }
+      } catch (err) {
+        showToast('서버 통신 실패: ' + err.message);
+      }
+    }
+
+    async function toggleStatus() {
+      if (!activeApiId) return;
+      try {
+        const res = await fetch(`/api/custom-apis/${activeApiId}/toggle`, { method: 'POST' });
+        const result = await res.json();
+        if (result.success) {
+          showToast(result.enabled ? 'API가 활성화되었습니다.' : 'API가 비활성화되었습니다.');
+          const api = currentApis.find(a => a.id === activeApiId);
+          if (api) api.enabled = result.enabled;
+          if (statusPill) {
+            statusPill.textContent = result.enabled ? '활성' : '비활성';
+            statusPill.className = `api-status-pill ${result.enabled ? 'pill-active' : 'pill-inactive'}`;
+          }
+          renderList(searchInput ? searchInput.value.trim() : '');
+        }
+      } catch (err) {
+        showToast('토글 실패: ' + err.message);
+      }
+    }
+
+    async function runInstantTest() {
+      const api = currentApis.find(a => a.id === activeApiId);
+      const pathVal = inputPath ? inputPath.value.trim() : (api ? api.path : '');
+      if (!pathVal) {
+        showToast('엔드포인트 경로를 지정하세요.');
+        return;
+      }
+
+      const methodVal = inputMethod ? inputMethod.value : (api ? api.method : 'GET');
+      const httpMethod = methodVal === 'ANY' ? 'GET' : methodVal;
+      const queryStr = testerQueryInput ? testerQueryInput.value.trim() : '';
+      const cleanQuery = queryStr ? (queryStr.startsWith('?') ? queryStr : '?' + queryStr) : '';
+      const testUrl = `/api/fn/${pathVal}${cleanQuery}`;
+
+      const headers = {};
+      const authVal = inputAuth ? inputAuth.value : (api ? api.auth : 'public');
+      const apiKeyVal = inputApiKey ? inputApiKey.value.trim() : (api ? api.apiKey : '');
+      if (authVal === 'key' && apiKeyVal) {
+        headers['X-API-Key'] = apiKeyVal;
+      }
+
+      const options = { method: httpMethod, headers };
+      if (['POST', 'PUT', 'PATCH'].includes(httpMethod) && testerBodyInput) {
+        headers['Content-Type'] = 'application/json';
+        options.body = testerBodyInput.value.trim() || '{}';
+      }
+
+      if (btnTesterSend) btnTesterSend.disabled = true;
+      if (testerSendLabel) testerSendLabel.textContent = '전송 중...';
+      if (testerResStatus) {
+        testerResStatus.textContent = '요청 중...';
+        testerResStatus.className = 'api-res-badge';
+      }
+      if (testerOutputPre) testerOutputPre.textContent = '서버 응답 대기 중...';
+
+      const startTime = performance.now();
+      try {
+        const response = await fetch(testUrl, options);
+        const latency = Math.round(performance.now() - startTime);
+
+        if (testerResTime) testerResTime.textContent = `${latency} ms`;
+        if (testerResStatus) {
+          testerResStatus.textContent = `${response.status} ${response.statusText || ''}`;
+          testerResStatus.className = `api-res-badge ${response.ok ? 'success' : 'error'}`;
+        }
+
+        const rawText = await response.text();
+        let formattedOutput = rawText;
+        try {
+          const parsed = JSON.parse(rawText);
+          formattedOutput = JSON.stringify(parsed, null, 2);
+        } catch (_) {}
+
+        if (testerOutputPre) testerOutputPre.textContent = formattedOutput;
+
+        // Increment calls counter in memory
+        if (api) {
+          api.calls = (api.calls || 0) + 1;
+          api.lastCalled = new Date().toISOString();
+          renderList(searchInput ? searchInput.value.trim() : '');
+          if (callsInfo) callsInfo.textContent = `이 API ${api.calls}회 호출됨 (방금 실행)`;
+        }
+      } catch (err) {
+        const latency = Math.round(performance.now() - startTime);
+        if (testerResTime) testerResTime.textContent = `${latency} ms`;
+        if (testerResStatus) {
+          testerResStatus.textContent = '요청 실패';
+          testerResStatus.className = 'api-res-badge error';
+        }
+        if (testerOutputPre) testerOutputPre.textContent = `Error: ${err.message}`;
+      } finally {
+        if (btnTesterSend) btnTesterSend.disabled = false;
+        if (testerSendLabel) testerSendLabel.textContent = '요청 전송';
+      }
+    }
+
+    // Event Listeners
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => renderList(e.target.value.trim()));
+    }
+    if (btnNew) btnNew.addEventListener('click', createNewApi);
+    if (btnEmptyCreate) btnEmptyCreate.addEventListener('click', createNewApi);
+    if (btnRefresh) {
+      btnRefresh.addEventListener('click', () => {
+        showToast('API 목록 갱신 중...');
+        window.loadCustomApis(activeApiId);
+      });
+    }
+    if (btnSave) btnSave.addEventListener('click', saveApi);
+    if (btnDelete) btnDelete.addEventListener('click', deleteApi);
+    if (statusPill) statusPill.addEventListener('click', toggleStatus);
+
+    if (inputAuth) {
+      inputAuth.addEventListener('change', () => {
+        if (keyContainer) keyContainer.classList.toggle('hidden', inputAuth.value !== 'key');
+      });
+    }
+
+    if (btnGenApiKey) {
+      btnGenApiKey.addEventListener('click', () => {
+        const rand = Array.from(crypto.getRandomValues(new Uint8Array(12)))
+          .map(b => b.toString(16).padStart(2, '0')).join('');
+        if (inputApiKey) inputApiKey.value = `sk_live_${rand}`;
+        showToast('새로운 API Key가 생성되었습니다.');
+      });
+    }
+
+    if (btnFormatJson && textareaJson) {
+      btnFormatJson.addEventListener('click', () => {
+        try {
+          const parsed = JSON.parse(textareaJson.value);
+          textareaJson.value = JSON.stringify(parsed, null, 2);
+          showToast('JSON 정렬 완료');
+        } catch (e) {
+          showToast('유효하지 않은 JSON입니다: ' + e.message);
+        }
+      });
+    }
+
+    modeRadios.forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        modeRadios.forEach(r => {
+          const card = r.closest('.api-mode-card');
+          if (card) card.classList.toggle('selected', r.checked);
+        });
+        showModeEditor(e.target.value);
+      });
+    });
+
+    // Subtabs
+    subtabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tabName = btn.dataset.subtab;
+        subtabBtns.forEach(b => b.classList.toggle('active', b === btn));
+        if (paneDesign) paneDesign.classList.toggle('hidden', tabName !== 'design');
+        if (paneTester) paneTester.classList.toggle('hidden', tabName !== 'tester');
+      });
+    });
+
+    // Copy actions
+    if (btnCopyTunnel && linkTunnelUrl) {
+      btnCopyTunnel.addEventListener('click', async () => {
+        if (!linkTunnelUrl.value) {
+          showToast('외부 터널 주소가 아직 없습니다. termux-cloud --bg 로 실행하세요.');
+          return;
+        }
+        if (await copyToClipboard(linkTunnelUrl.value)) {
+          showToast('외부 API URL이 복사되었습니다.');
+        }
+      });
+    }
+
+    if (btnCopyLocal && linkLocalUrl) {
+      btnCopyLocal.addEventListener('click', async () => {
+        if (await copyToClipboard(linkLocalUrl.value)) {
+          showToast('로컬 API URL이 복사되었습니다.');
+        }
+      });
+    }
+
+    if (btnCopyCurl && curlCode) {
+      btnCopyCurl.addEventListener('click', async () => {
+        if (await copyToClipboard(curlCode.textContent)) {
+          showToast('cURL 명령어가 복사되었습니다.');
+        }
+      });
+    }
+
+    if (btnTesterSend) {
+      btnTesterSend.addEventListener('click', runInstantTest);
+    }
+
+    if (btnDocs) {
+      btnDocs.addEventListener('click', () => {
+        Pulse.ask(
+          '💡 Pulse API Studio 사용 팁:\n\n' +
+          '1. [JSON Mock]: 고정된 데이터를 초고속으로 반환합니다.\n' +
+          '2. [Python 서버리스]: handle(req) 함수 안에서 연산/파라미터 가공 후 딕셔너리를 반환합니다.\n' +
+          '3. [스마트폰 디바이스]: 스마트폰 배터리/스토리지 상태를 실시간 호출합니다.\n' +
+          '4. 외부에서 호출하려면 termux-cloud --bg 명령으로 Cloudflare 터널을 켜두세요.',
+          { cancel: false, confirm: '확인' }
+        );
+      });
+    }
+
+    // Load initial list
+    window.loadCustomApis();
   }
 
   // Start app

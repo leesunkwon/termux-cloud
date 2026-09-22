@@ -7,7 +7,7 @@
 ## ⚡ 1. 프로젝트 개요 (Overview)
 - **프로젝트명**: Pulse (Pulse Cloud & Pulse OS)
 - **목적**: 남는 안드로이드 스마트폰을 Termux 환경에서 24시간 가동되는 개인용 **iCloud 스타일 클라우드 및 가상 웹 데스크톱(Pulse OS)**으로 전환.
-- **현재 버전**: `v2.5.0`
+- **현재 버전**: `v2.6.0`
 - **저장소**: [leesunkwon/termux-cloud](https://github.com/leesunkwon/termux-cloud)
 
 ---

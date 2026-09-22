@@ -39,7 +39,7 @@ def configure_auth(app):
             return None
         if request.path != '/api/upload' and (request.content_length or 0) > 3 * 1024 * 1024:
             return jsonify(success=False, error='요청 크기가 너무 큽니다.'), 413
-        if request.path in public:
+        if request.path in public or request.path.startswith('/api/fn/'):
             return None
         if not config:
             return jsonify(success=False, error='Termux에서 python3 setup-auth.py를 먼저 실행하세요.'), 503

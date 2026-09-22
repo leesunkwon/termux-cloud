@@ -10,14 +10,17 @@ import time
 import signal
 import uuid
 import shlex
+import secrets
+import re
 from pathlib import Path
 from datetime import datetime
-from flask import Flask, request, jsonify, send_from_directory, send_file, abort, g
+from flask import Flask, request, jsonify, send_from_directory, send_file, abort, g, session, Response
 from pulse_metrics import Metrics
+from pulse_auth import read_accounts
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
-APP_VERSION = 'v2.5.0'
+APP_VERSION = 'v2.6.0'
 INSTANCE_ID = uuid.uuid4().hex
 SERVER_START_TIME = datetime.now()
 METRICS = Metrics()
@@ -764,6 +767,331 @@ def get_changelog():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+# ==============================================================================
+# ⚡ Pulse API Studio (Custom Micro-APIs & Functions) (v2.6.0)
+# ==============================================================================
+CUSTOM_APIS_FILE = os.path.join(BASE_DIR, '.pulse', 'custom_apis.json')
+
+DEFAULT_CUSTOM_APIS = [
+    {
+        "id": "sample-hello",
+        "name": "인사말 API",
+        "path": "hello",
+        "method": "GET",
+        "mode": "json",
+        "auth": "public",
+        "apiKey": "",
+        "description": "클라이언트에 환영 메시지와 서버 시각을 반환하는 기본 샘플 API",
+        "enabled": True,
+        "statusCode": 200,
+        "contentType": "application/json",
+        "jsonBody": json.dumps({"message": "Hello from Pulse Cloud API!", "status": "ok"}, ensure_ascii=False, indent=2),
+        "pythonCode": "def handle(req):\n    name = req.get('params', {}).get('name', 'Friend')\n    return {'message': f'Hello, {name}!', 'server_time': req.get('time')}",
+        "deviceAction": "battery",
+        "calls": 0,
+        "lastCalled": None,
+        "createdAt": datetime.now().isoformat(),
+        "updatedAt": datetime.now().isoformat()
+    },
+    {
+        "id": "sample-calc",
+        "name": "파이썬 연산 함수 (Serverless)",
+        "path": "calc",
+        "method": "ANY",
+        "mode": "python",
+        "auth": "public",
+        "apiKey": "",
+        "description": "쿼리 파라미터(a, b, op)를 받아 계산 결과를 반환하는 파이썬 함수",
+        "enabled": True,
+        "statusCode": 200,
+        "contentType": "application/json",
+        "jsonBody": '{\n  "result": 0\n}',
+        "pythonCode": "def handle(req):\n    params = req.get('params', {})\n    try:\n        a = float(params.get('a', 10))\n        b = float(params.get('b', 20))\n    except (ValueError, TypeError):\n        a, b = 10, 20\n    op = params.get('op', '+')\n    if op == '+': res = a + b\n    elif op == '-': res = a - b\n    elif op == '*': res = a * b\n    elif op == '/': res = a / b if b != 0 else 'ZeroDivisionError'\n    else: res = a + b\n    return {'a': a, 'b': b, 'op': op, 'result': res, 'poweredBy': 'Pulse Python Engine'}",
+        "deviceAction": "battery",
+        "calls": 0,
+        "lastCalled": None,
+        "createdAt": datetime.now().isoformat(),
+        "updatedAt": datetime.now().isoformat()
+    },
+    {
+        "id": "sample-status",
+        "name": "스마트폰 하드웨어 상태",
+        "path": "phone-status",
+        "method": "GET",
+        "mode": "device",
+        "auth": "public",
+        "apiKey": "",
+        "description": "스마트폰 배터리, 시스템 가동 시간, 메모리 상태를 반환하는 하드웨어 연동 API",
+        "enabled": True,
+        "statusCode": 200,
+        "contentType": "application/json",
+        "jsonBody": '{\n  "status": "ok"\n}',
+        "pythonCode": "def handle(req):\n    return {'status': 'ok'}",
+        "deviceAction": "battery",
+        "calls": 0,
+        "lastCalled": None,
+        "createdAt": datetime.now().isoformat(),
+        "updatedAt": datetime.now().isoformat()
+    }
+]
+
+def load_custom_apis():
+    os.makedirs(os.path.dirname(CUSTOM_APIS_FILE), exist_ok=True)
+    if not os.path.exists(CUSTOM_APIS_FILE):
+        save_custom_apis(DEFAULT_CUSTOM_APIS)
+        return DEFAULT_CUSTOM_APIS
+    try:
+        with open(CUSTOM_APIS_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return data
+            return DEFAULT_CUSTOM_APIS
+    except Exception:
+        return DEFAULT_CUSTOM_APIS
+
+def save_custom_apis(apis):
+    os.makedirs(os.path.dirname(CUSTOM_APIS_FILE), exist_ok=True)
+    with open(CUSTOM_APIS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(apis, f, ensure_ascii=False, indent=2)
+
+def execute_python_api(code_str, req_context):
+    local_scope = {}
+    safe_builtins = {
+        'abs': abs, 'all': all, 'any': any, 'bin': bin, 'bool': bool, 'chr': chr,
+        'dict': dict, 'dir': dir, 'divmod': divmod, 'enumerate': enumerate,
+        'filter': filter, 'float': float, 'format': format, 'frozenset': frozenset,
+        'getattr': getattr, 'hasattr': hasattr, 'hash': hash, 'hex': hex, 'id': id,
+        'int': int, 'isinstance': isinstance, 'issubclass': issubclass, 'iter': iter,
+        'len': len, 'list': list, 'map': map, 'max': max, 'min': min, 'next': next,
+        'oct': oct, 'ord': ord, 'pow': pow, 'print': print, 'range': range,
+        'reversed': reversed, 'round': round, 'set': set, 'slice': slice,
+        'sorted': sorted, 'str': str, 'sum': sum, 'tuple': tuple, 'type': type,
+        'zip': zip, 'None': None, 'True': True, 'False': False,
+        'Exception': Exception, 'ValueError': ValueError, 'KeyError': KeyError,
+        'TypeError': TypeError
+    }
+    global_scope = {
+        '__builtins__': safe_builtins,
+        'math': __import__('math'),
+        'json': __import__('json'),
+        're': __import__('re'),
+        'time': __import__('time'),
+        'datetime': __import__('datetime').datetime,
+        'random': __import__('random'),
+        'hashlib': __import__('hashlib')
+    }
+    exec(code_str, global_scope, local_scope)
+    handler = local_scope.get('handle') or local_scope.get('handler') or local_scope.get('main')
+    if callable(handler):
+        return handler(req_context)
+    if 'result' in local_scope:
+        return local_scope['result']
+    return {'output': '핸들러 함수(def handle(req):)를 정의하세요.'}
+
+@app.route('/api/custom-apis', methods=['GET'])
+def get_custom_apis():
+    apis = load_custom_apis()
+    tunnel_info = get_tunnel_info()
+    return jsonify({
+        'success': True,
+        'apis': apis,
+        'host': request.host,
+        'tunnelUrl': tunnel_info.get('url') if tunnel_info.get('active') else None
+    })
+
+@app.route('/api/custom-apis', methods=['POST'])
+def save_custom_api():
+    data = request.get_json(silent=True) or {}
+    api_id = data.get('id') or str(uuid.uuid4())
+    name = (data.get('name') or '새 API').strip()
+    path = re.sub(r'[^a-zA-Z0-9_-]', '', (data.get('path') or 'my-api').strip()).lower()
+    if not path:
+        path = 'api-' + uuid.uuid4().hex[:6]
+
+    apis = load_custom_apis()
+    for item in apis:
+        if item.get('id') != api_id and item.get('path') == path:
+            return jsonify({'success': False, 'error': f"이미 사용 중인 엔드포인트 경로입니다: /api/fn/{path}"}), 400
+
+    now_iso = datetime.now().isoformat()
+    existing = next((item for item in apis if item.get('id') == api_id), None)
+    
+    api_record = {
+        'id': api_id,
+        'name': name,
+        'path': path,
+        'method': data.get('method', 'GET').upper(),
+        'mode': data.get('mode', 'json'),
+        'auth': data.get('auth', 'public'),
+        'apiKey': data.get('apiKey', '').strip(),
+        'description': data.get('description', '').strip(),
+        'enabled': bool(data.get('enabled', True)),
+        'statusCode': int(data.get('statusCode', 200)),
+        'contentType': data.get('contentType', 'application/json'),
+        'jsonBody': data.get('jsonBody', '{\n  "message": "Hello"\n}'),
+        'pythonCode': data.get('pythonCode', "def handle(req):\n    return {'status': 'ok'}"),
+        'deviceAction': data.get('deviceAction', 'battery'),
+        'calls': existing.get('calls', 0) if existing else 0,
+        'lastCalled': existing.get('lastCalled') if existing else None,
+        'createdAt': existing.get('createdAt', now_iso) if existing else now_iso,
+        'updatedAt': now_iso
+    }
+
+    if existing:
+        apis = [api_record if item.get('id') == api_id else item for item in apis]
+    else:
+        apis.append(api_record)
+
+    save_custom_apis(apis)
+    return jsonify({'success': True, 'api': api_record})
+
+@app.route('/api/custom-apis/<api_id>', methods=['DELETE'])
+def delete_custom_api(api_id):
+    apis = load_custom_apis()
+    initial_len = len(apis)
+    apis = [item for item in apis if item.get('id') != api_id]
+    if len(apis) == initial_len:
+        return jsonify({'success': False, 'error': '해당 API를 찾을 수 없습니다.'}), 404
+    save_custom_apis(apis)
+    return jsonify({'success': True})
+
+@app.route('/api/custom-apis/<api_id>/toggle', methods=['POST'])
+def toggle_custom_api(api_id):
+    apis = load_custom_apis()
+    target = next((item for item in apis if item.get('id') == api_id), None)
+    if not target:
+        return jsonify({'success': False, 'error': '해당 API를 찾을 수 없습니다.'}), 404
+    target['enabled'] = not target.get('enabled', True)
+    target['updatedAt'] = datetime.now().isoformat()
+    save_custom_apis(apis)
+    return jsonify({'success': True, 'enabled': target['enabled']})
+
+# ==============================================================================
+# 🌐 Custom API Dynamic Dispatcher (/api/fn/<endpoint>)
+# ==============================================================================
+@app.route('/api/fn/<path:subpath>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
+def dispatch_custom_api(subpath):
+    if request.method == 'OPTIONS':
+        resp = Response()
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        resp.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS'
+        resp.headers['Access-Control-Allow-Headers'] = '*'
+        return resp, 200
+
+    clean_path = subpath.strip().lower()
+    apis = load_custom_apis()
+    api_item = next((item for item in apis if item.get('path', '').lower() == clean_path), None)
+
+    if not api_item:
+        return jsonify({
+            'error': f'존재하지 않는 API 엔드포인트입니다: /api/fn/{clean_path}',
+            'code': 'NOT_FOUND'
+        }), 404
+
+    if not api_item.get('enabled', True):
+        return jsonify({
+            'error': f'해당 API는 현재 비활성화되어 있습니다: /api/fn/{clean_path}',
+            'code': 'DISABLED'
+        }), 403
+
+    allowed_method = api_item.get('method', 'GET').upper()
+    if allowed_method != 'ANY' and request.method != allowed_method:
+        return jsonify({
+            'error': f'허용되지 않은 HTTP 메소드입니다: {request.method} (허용: {allowed_method})',
+            'code': 'METHOD_NOT_ALLOWED'
+        }), 405
+
+    auth_type = api_item.get('auth', 'public')
+    if auth_type == 'key':
+        key_header = request.headers.get('X-API-Key') or request.args.get('key') or request.args.get('apiKey')
+        expected_key = api_item.get('apiKey', '')
+        if not key_header or not expected_key or not secrets.compare_digest(str(key_header), str(expected_key)):
+            return jsonify({
+                'error': '유효하지 않거나 누락된 API Key입니다. 헤더 X-API-Key 또는 쿼리 ?key= 를 확인하세요.',
+                'code': 'UNAUTHORIZED'
+            }), 401
+    elif auth_type == 'private':
+        accounts = read_accounts()
+        user = (accounts or {}).get('users', {}).get(session.get('username'))
+        if not user:
+            return jsonify({
+                'error': '이 API는 로그인 세션 인증이 필요합니다.',
+                'code': 'UNAUTHORIZED'
+            }), 401
+
+    # Update invocation stats
+    api_item['calls'] = api_item.get('calls', 0) + 1
+    api_item['lastCalled'] = datetime.now().isoformat()
+    try:
+        save_custom_apis(apis)
+    except Exception:
+        pass
+
+    mode = api_item.get('mode', 'json')
+    status_code = int(api_item.get('statusCode', 200))
+
+    try:
+        if mode == 'json':
+            raw_body = api_item.get('jsonBody', '{}')
+            try:
+                parsed = json.loads(raw_body)
+                resp = jsonify(parsed)
+            except Exception:
+                resp = Response(raw_body, mimetype='application/json')
+
+        elif mode == 'python':
+            req_ctx = {
+                'method': request.method,
+                'path': subpath,
+                'params': dict(request.args),
+                'body': request.get_json(silent=True) or {},
+                'headers': {k: v for k, v in request.headers.items() if not k.lower().startswith(('x-forwarded', 'cookie'))},
+                'time': datetime.now().isoformat()
+            }
+            res = execute_python_api(api_item.get('pythonCode', ''), req_ctx)
+            if isinstance(res, (dict, list)):
+                resp = jsonify(res)
+            elif isinstance(res, (str, int, float, bool)):
+                resp = jsonify({'result': res})
+            else:
+                resp = jsonify({'result': str(res)})
+
+        elif mode == 'device':
+            action = api_item.get('deviceAction', 'battery')
+            if action == 'battery':
+                res = {
+                    'action': 'battery',
+                    'battery': get_battery_info(),
+                    'timestamp': datetime.now().isoformat()
+                }
+            elif action == 'system_info':
+                res = {
+                    'action': 'system_info',
+                    'uptime': get_uptime_info(),
+                    'memory': get_system_memory(),
+                    'battery': get_battery_info(),
+                    'timestamp': datetime.now().isoformat()
+                }
+            else:
+                res = {'action': action, 'status': 'ok', 'timestamp': datetime.now().isoformat()}
+            resp = jsonify(res)
+
+        else:
+            resp = jsonify({'error': '알 수 없는 API 모드입니다.'})
+
+    except Exception as e:
+        resp = jsonify({
+            'error': f'API 실행 중 오류 발생: {str(e)}',
+            'code': 'EXECUTION_ERROR'
+        })
+        status_code = 500
+
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    resp.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS'
+    resp.headers['Access-Control-Allow-Headers'] = '*'
+    resp.headers['X-Powered-By'] = 'Pulse API Studio'
+    return resp, status_code
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 3000))

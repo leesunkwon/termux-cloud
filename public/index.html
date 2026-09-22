@@ -240,6 +240,36 @@
             </div>
           </div>
         </div>
+
+        <!-- 선택 카드 4: API 서비스 (Pulse API Studio) -->
+        <div class="portal-card card-api" id="portal-card-api">
+          <div class="portal-card-glow glow-emerald"></div>
+          <div class="portal-card-header">
+            <div class="portal-icon-box icon-api">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              </svg>
+            </div>
+            <span class="portal-tag emerald">마이크로 서버리스</span>
+          </div>
+
+          <div class="portal-card-body">
+            <h2 class="portal-card-title">API 서비스 (Studio)</h2>
+            <p class="portal-card-desc">스마트폰에서 나만의 커스텀 REST API와 웹훅을 직접 설계하고, 외부(Cloudflare) 및 로컬 고유 링크를 즉시 발급·테스트하세요.</p>
+            
+            <div class="portal-stat-pill">
+              <span class="pill-dot emerald"></span>
+              <span id="portal-api-summary">API 로딩 중...</span>
+            </div>
+          </div>
+
+          <div class="portal-card-footer">
+            <span class="portal-btn-label">API Studio 열기</span>
+            <div class="portal-arrow-circle">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 포털 하단 요약 정보 바 -->
@@ -937,6 +967,14 @@
               <span class="shortcut-symbol">📷</span>
             </div>
             <span class="shortcut-name">Pulse Cam</span>
+          </div>
+
+          <!-- Pulse API Studio 바로가기 -->
+          <div class="desktop-shortcut" data-app="api" tabindex="0" title="Pulse API Studio (나만의 API 서비스)">
+            <div class="shortcut-icon icon-bg-amber">
+              <span class="shortcut-symbol">⚡</span>
+            </div>
+            <span class="shortcut-name">API 서비스</span>
           </div>
         </div>
         <div class="desktop-files-grid" id="desktop-files-grid" aria-label="바탕화면 파일"></div>
@@ -1678,6 +1716,268 @@
         <div class="window-resize-handle"></div>
       </div>
 
+      <!-- [창 17: Pulse API Studio] -->
+      <div class="desktop-window hidden" id="win-api" data-app="api">
+        <div class="window-header">
+          <div class="window-traffic-lights">
+            <button class="traffic-light btn-close" data-app="api"></button>
+            <button class="traffic-light btn-min" data-app="api"></button>
+            <button class="traffic-light btn-max" data-app="api"></button>
+          </div>
+          <div class="window-title">
+            <span class="win-title-icon">⚡</span>
+            <span class="win-title-text">Pulse API Studio</span>
+          </div>
+          <div class="window-header-actions">
+            <button class="win-btn-sm" id="btn-api-new" title="새로운 API 엔드포인트 생성">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <span>새 API</span>
+            </button>
+            <button class="win-btn-sm" id="btn-api-refresh" title="목록 새로고침">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="window-body api-studio-body">
+          <!-- 좌측 사이드바: API 목록 -->
+          <div class="api-sidebar">
+            <div class="api-sidebar-header">
+              <div class="api-search-wrap">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16" y2="16"></line></svg>
+                <input type="text" id="api-search-input" placeholder="API 검색..." autocomplete="off">
+              </div>
+            </div>
+            <div class="api-list-scroll" id="api-list">
+              <!-- API item cards rendered dynamically -->
+            </div>
+            <div class="api-sidebar-footer">
+              <span id="api-count-text">0개 엔드포인트</span>
+              <button class="btn-text-sm" id="btn-api-docs" title="API 가이드 보기">도움말</button>
+            </div>
+          </div>
+
+          <!-- 우측 메인 패널: API 상세 설계 & 링크 & 테스터 -->
+          <div class="api-main-panel" id="api-main-panel">
+            <!-- 빈 상태 (선택된 API 없을 때) -->
+            <div class="api-empty-view hidden" id="api-empty-view">
+              <div class="api-empty-icon">⚡</div>
+              <h3>선택된 API가 없습니다</h3>
+              <p>좌측 목록에서 API를 선택하거나, '+ 새 API' 버튼을 눌러 나만의 엔드포인트를 설계하세요.</p>
+              <button class="btn btn-primary btn-sm" id="btn-api-empty-create">+ 새 API 생성</button>
+            </div>
+
+            <!-- 에디터 뷰 -->
+            <div class="api-editor-content" id="api-editor-content">
+              <!-- 상단 액션 바 -->
+              <div class="api-editor-topbar">
+                <div class="api-endpoint-badge-row">
+                  <span class="api-method-badge method-get" id="api-view-method-badge">GET</span>
+                  <span class="api-endpoint-path-prefix">/api/fn/</span>
+                  <span class="api-endpoint-path-val" id="api-view-path">hello</span>
+                  <button class="api-status-pill pill-active" id="api-view-status-pill" title="클릭하여 활성/비활성 토글">활성</button>
+                </div>
+                <div class="api-topbar-actions">
+                  <button class="btn btn-sm btn-outline-danger" id="btn-api-delete" title="현재 API 삭제">삭제</button>
+                  <button class="btn btn-sm btn-primary" id="btn-api-save" title="변경사항 저장">저장</button>
+                </div>
+              </div>
+
+              <!-- 발급된 고유 링크 & cURL 복사 카드 -->
+              <div class="api-links-card">
+                <div class="api-links-header">
+                  <span class="api-section-title">🔗 발급된 API 호출 링크</span>
+                  <span class="api-tunnel-status-chip" id="api-tunnel-indicator">외부 터널 확인 중</span>
+                </div>
+                <!-- 링크 1: 외부 Cloudflare URL -->
+                <div class="api-link-row" id="api-link-tunnel-row">
+                  <span class="api-link-tag public-tag">외부(인터넷)</span>
+                  <input type="text" class="api-link-input font-mono" id="api-link-tunnel-url" readonly value="" placeholder="터널 가동 시 자동 발급됩니다">
+                  <button class="btn-api-copy" id="btn-copy-tunnel-url" title="외부 URL 복사">복사</button>
+                  <a href="#" target="_blank" class="btn-api-open" id="btn-open-tunnel-url" title="새 창에서 호출">열기</a>
+                </div>
+                <!-- 링크 2: 로컬 Wi-Fi URL -->
+                <div class="api-link-row">
+                  <span class="api-link-tag local-tag">로컬(Wi-Fi)</span>
+                  <input type="text" class="api-link-input font-mono" id="api-link-local-url" readonly value="" placeholder="로컬 주소 계산 중...">
+                  <button class="btn-api-copy" id="btn-copy-local-url" title="로컬 URL 복사">복사</button>
+                  <a href="#" target="_blank" class="btn-api-open" id="btn-open-local-url" title="새 창에서 호출">열기</a>
+                </div>
+                <!-- cURL 명령어 복사 바 -->
+                <div class="api-curl-bar">
+                  <span class="api-curl-label">cURL:</span>
+                  <code class="api-curl-code" id="api-curl-text">curl -X GET ...</code>
+                  <button class="btn-api-copy-sm" id="btn-copy-curl" title="cURL 복사">복사</button>
+                </div>
+              </div>
+
+              <!-- 탭 네비게이션: [설계 & 코드] / [실시간 테스터] -->
+              <div class="api-subtabs">
+                <button class="api-subtab-btn active" data-subtab="design" id="subtab-btn-design">설계 &amp; 로직</button>
+                <button class="api-subtab-btn" data-subtab="tester" id="subtab-btn-tester">인스턴트 테스터 (Test Run)</button>
+              </div>
+
+              <!-- 서브탭 1: 설계 & 로직 -->
+              <div class="api-subtab-pane active" id="pane-api-design">
+                <div class="api-form-grid">
+                  <div class="api-form-group">
+                    <label class="api-label" for="api-input-name">API 이름</label>
+                    <input type="text" id="api-input-name" class="api-input" placeholder="예: 환영 메시지 API">
+                  </div>
+                  <div class="api-form-group">
+                    <label class="api-label" for="api-input-path">엔드포인트 경로 (/api/fn/ 뒤)</label>
+                    <div class="api-input-prefix-wrap">
+                      <span class="api-input-prefix">/api/fn/</span>
+                      <input type="text" id="api-input-path" class="api-input font-mono" placeholder="my-service">
+                    </div>
+                  </div>
+                  <div class="api-form-group">
+                    <label class="api-label" for="api-input-method">HTTP 메소드</label>
+                    <select id="api-input-method" class="api-select">
+                      <option value="GET">GET (데이터 조회)</option>
+                      <option value="POST">POST (데이터 전송/처리)</option>
+                      <option value="PUT">PUT (수정/대체)</option>
+                      <option value="DELETE">DELETE (삭제)</option>
+                      <option value="PATCH">PATCH (일부 수정)</option>
+                      <option value="ANY">ANY (모든 메소드 허용)</option>
+                    </select>
+                  </div>
+                  <div class="api-form-group">
+                    <label class="api-label" for="api-input-auth">인증 권한</label>
+                    <select id="api-input-auth" class="api-select">
+                      <option value="public">공개 (누구나 호출 가능 / 웹훅용)</option>
+                      <option value="key">API Key 인증 필수 (X-API-Key 헤더)</option>
+                      <option value="private">비공개 (Pulse 로그인 세션 필수)</option>
+                    </select>
+                  </div>
+                  <div class="api-form-group api-key-group hidden" id="api-key-container">
+                    <label class="api-label" for="api-input-apikey">API Key (비밀 키)</label>
+                    <div class="api-input-with-action">
+                      <input type="text" id="api-input-apikey" class="api-input font-mono" placeholder="헤더 X-API-Key 에 담아 보낼 키">
+                      <button class="win-btn-sm" id="btn-gen-apikey" title="랜덤 API Key 자동 생성">랜덤 생성</button>
+                    </div>
+                  </div>
+                  <div class="api-form-group">
+                    <label class="api-label" for="api-input-statuscode">응답 상태 코드</label>
+                    <select id="api-input-statuscode" class="api-select">
+                      <option value="200">200 OK</option>
+                      <option value="201">201 Created</option>
+                      <option value="202">202 Accepted</option>
+                      <option value="400">400 Bad Request</option>
+                      <option value="404">404 Not Found</option>
+                      <option value="500">500 Internal Server Error</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- API 모드 선택 라디오 -->
+                <div class="api-mode-selector-wrap">
+                  <label class="api-label">처리 모드 (Engine)</label>
+                  <div class="api-mode-cards">
+                    <label class="api-mode-card" data-mode="json">
+                      <input type="radio" name="api-mode-radio" value="json" checked>
+                      <div class="api-mode-info">
+                        <span class="api-mode-title">📄 JSON Mock 모드</span>
+                        <span class="api-mode-desc">정적 JSON 데이터를 1초 만에 반환</span>
+                      </div>
+                    </label>
+                    <label class="api-mode-card" data-mode="python">
+                      <input type="radio" name="api-mode-radio" value="python">
+                      <div class="api-mode-info">
+                        <span class="api-mode-title">🐍 Python 서버리스 모드</span>
+                        <span class="api-mode-desc">파라미터/본문을 동적 연산 후 반환</span>
+                      </div>
+                    </label>
+                    <label class="api-mode-card" data-mode="device">
+                      <input type="radio" name="api-mode-radio" value="device">
+                      <div class="api-mode-info">
+                        <span class="api-mode-title">📱 스마트폰 디바이스 모드</span>
+                        <span class="api-mode-desc">스마트폰 배터리/스펙/핑 반환</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- 모드별 상세 에디터 -->
+                <!-- 1. JSON 모드 본문 -->
+                <div class="api-mode-editor-pane" id="editor-pane-json">
+                  <div class="api-editor-header-bar">
+                    <span class="api-editor-label">응답 JSON 본문 (Response Body)</span>
+                    <button class="btn-text-sm" id="btn-format-json">JSON 정렬 (Format)</button>
+                  </div>
+                  <textarea class="api-code-textarea font-mono" id="api-textarea-json" rows="8" spellcheck="false"></textarea>
+                </div>
+
+                <!-- 2. Python 모드 본문 -->
+                <div class="api-mode-editor-pane hidden" id="editor-pane-python">
+                  <div class="api-editor-header-bar">
+                    <span class="api-editor-label">핸들러 스크립트 (Python 3.x)</span>
+                    <span class="api-editor-hint">req['params'], req['body'] 사용 가능</span>
+                  </div>
+                  <textarea class="api-code-textarea font-mono" id="api-textarea-python" rows="10" spellcheck="false"></textarea>
+                </div>
+
+                <!-- 3. Device 모드 선택 -->
+                <div class="api-mode-editor-pane hidden" id="editor-pane-device">
+                  <div class="api-form-group">
+                    <label class="api-label" for="api-select-device-action">스마트폰 정보/동작 선택</label>
+                    <select id="api-select-device-action" class="api-select">
+                      <option value="battery">배터리 상태 및 잔량 (Battery Level &amp; Charging)</option>
+                      <option value="storage">스마트폰 저장공간 잔여량 (Storage Free/Total)</option>
+                      <option value="info">스마트폰 시스템 사양 (OS, CPU, 메모리)</option>
+                      <option value="ping">스마트폰 헬스체크 핑 (Heartbeat Ping)</option>
+                    </select>
+                  </div>
+                  <p class="api-editor-hint">호출 시 스마트폰의 실시간 하드웨어 센서 데이터를 JSON으로 즉시 반환합니다.</p>
+                </div>
+              </div>
+
+              <!-- 서브탭 2: 인스턴트 테스터 -->
+              <div class="api-subtab-pane hidden" id="pane-api-tester">
+                <div class="api-tester-top">
+                  <div class="api-tester-url-bar">
+                    <span class="api-method-badge method-get" id="tester-method-badge">GET</span>
+                    <input type="text" class="api-tester-url-input font-mono" id="tester-url-input" readonly>
+                    <button class="btn btn-primary btn-sm" id="btn-tester-send">
+                      <span id="tester-send-label">요청 전송</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="api-tester-params-grid">
+                  <div class="api-tester-box">
+                    <label class="api-label">URL 쿼리 파라미터 (Query String, 예: ?name=Pulse&amp;val=10)</label>
+                    <input type="text" id="tester-query-input" class="api-input font-mono" placeholder="?name=John&amp;page=1">
+                  </div>
+                  <div class="api-tester-box" id="tester-body-box">
+                    <label class="api-label">요청 본문 (JSON Request Body - POST/PUT/PATCH 시)</label>
+                    <textarea id="tester-body-input" class="api-code-textarea font-mono" rows="4" placeholder='{"message": "test"}'></textarea>
+                  </div>
+                </div>
+
+                <!-- 결과 디스플레이 -->
+                <div class="api-tester-result-wrap">
+                  <div class="api-tester-result-header">
+                    <span class="api-section-title">응답 결과 (Response)</span>
+                    <div class="api-result-meta">
+                      <span class="api-res-badge" id="tester-res-status">응답 대기</span>
+                      <span class="api-res-badge latency" id="tester-res-time">0 ms</span>
+                    </div>
+                  </div>
+                  <pre class="api-tester-output font-mono" id="tester-output-pre">// [요청 전송] 버튼을 누르면 실시간 응답이 여기에 표시됩니다.</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="window-statusbar">
+          <span id="api-status-info">Pulse API Engine 준비됨</span>
+          <span id="api-calls-info">총 0회 호출됨</span>
+        </div>
+        <div class="window-resize-handle"></div>
+      </div>
+
       <div class="desktop-snap-preview hidden" id="desktop-snap-preview"></div>
       <div class="desktop-marquee-selection hidden" id="desktop-marquee-selection"></div>
       </div>
@@ -1749,6 +2049,11 @@
             <span class="dock-icon">📷</span>
             <span class="dock-label">Pulse Cam</span>
             <span class="dock-dot hidden" data-app-dot="cam"></span>
+          </button>
+          <button class="dock-item" data-app="api" title="Pulse API Studio (나만의 API 서비스)">
+            <span class="dock-icon">⚡</span>
+            <span class="dock-label">API 서비스</span>
+            <span class="dock-dot hidden" data-app-dot="api"></span>
           </button>
           <span class="dock-divider"></span>
           <button class="dock-item" data-app="settings" title="Pulse OS 설정">
