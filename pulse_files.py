@@ -45,7 +45,9 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
         meta_file.parent.mkdir(mode=0o700, exist_ok=True)
         meta_file.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding='utf-8')
 
-    def get_file_meta(rel):
+    def get_file_meta(rel, all_metadata=None):
+        if all_metadata is not None:
+            return all_metadata.get(rel, {})
         return load_metadata().get(rel, {})
 
     def load_shares():
@@ -88,12 +90,12 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
             abort(400, description='JSON 요청이 필요합니다.')
         return body
 
-    def entry(p):
+    def entry(p, all_metadata=None):
         st = p.stat()
         rel = p.relative_to(root).as_posix()
         folder = p.is_dir()
         url = quote(rel, safe='/')
-        meta = get_file_meta(rel)
+        meta = get_file_meta(rel, all_metadata)
         return dict(name=p.name, path=rel, size=0 if folder else st.st_size,
                     sizeFormatted='폴더' if folder else format_size(st.st_size),
                     modified=int(st.st_mtime * 1000),
@@ -130,13 +132,14 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
         kind = request.args.get('type', 'all')
         result = []
         counts = dict(all=0, folder=0, image=0, video=0, document=0, audio=0, other=0, favorite=0)
+        all_metadata = load_metadata()
         for p in folder.iterdir():
             if p.name.startswith('.') or p.is_symlink():
                 continue
             try:
                 if not p.is_file() and not p.is_dir():
                     continue
-                item = entry(p)
+                item = entry(p, all_metadata)
                 counts['all'] += 1
                 counts[item['type'] if item['type'] in counts else 'other'] += 1
                 if item.get('favorite'):

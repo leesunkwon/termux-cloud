@@ -855,39 +855,56 @@ def save_custom_apis(apis):
     with open(CUSTOM_APIS_FILE, 'w', encoding='utf-8') as f:
         json.dump(apis, f, ensure_ascii=False, indent=2)
 
-def execute_python_api(code_str, req_context):
-    local_scope = {}
-    safe_builtins = {
-        'abs': abs, 'all': all, 'any': any, 'bin': bin, 'bool': bool, 'chr': chr,
-        'dict': dict, 'dir': dir, 'divmod': divmod, 'enumerate': enumerate,
-        'filter': filter, 'float': float, 'format': format, 'frozenset': frozenset,
-        'getattr': getattr, 'hasattr': hasattr, 'hash': hash, 'hex': hex, 'id': id,
-        'int': int, 'isinstance': isinstance, 'issubclass': issubclass, 'iter': iter,
-        'len': len, 'list': list, 'map': map, 'max': max, 'min': min, 'next': next,
-        'oct': oct, 'ord': ord, 'pow': pow, 'print': print, 'range': range,
-        'reversed': reversed, 'round': round, 'set': set, 'slice': slice,
-        'sorted': sorted, 'str': str, 'sum': sum, 'tuple': tuple, 'type': type,
-        'zip': zip, 'None': None, 'True': True, 'False': False,
-        'Exception': Exception, 'ValueError': ValueError, 'KeyError': KeyError,
-        'TypeError': TypeError
-    }
-    global_scope = {
-        '__builtins__': safe_builtins,
-        'math': __import__('math'),
-        'json': __import__('json'),
-        're': __import__('re'),
-        'time': __import__('time'),
-        'datetime': __import__('datetime').datetime,
-        'random': __import__('random'),
-        'hashlib': __import__('hashlib')
-    }
-    exec(code_str, global_scope, local_scope)
-    handler = local_scope.get('handle') or local_scope.get('handler') or local_scope.get('main')
-    if callable(handler):
-        return handler(req_context)
-    if 'result' in local_scope:
-        return local_scope['result']
-    return {'output': '핸들러 함수(def handle(req):)를 정의하세요.'}
+def execute_python_api(code_str, req_context, timeout_sec=3.0):
+    res_box = [None]
+    err_box = [None]
+
+    def _worker():
+        try:
+            local_scope = {}
+            safe_builtins = {
+                'abs': abs, 'all': all, 'any': any, 'bin': bin, 'bool': bool, 'chr': chr,
+                'dict': dict, 'dir': dir, 'divmod': divmod, 'enumerate': enumerate,
+                'filter': filter, 'float': float, 'format': format, 'frozenset': frozenset,
+                'getattr': getattr, 'hasattr': hasattr, 'hash': hash, 'hex': hex, 'id': id,
+                'int': int, 'isinstance': isinstance, 'issubclass': issubclass, 'iter': iter,
+                'len': len, 'list': list, 'map': map, 'max': max, 'min': min, 'next': next,
+                'oct': oct, 'ord': ord, 'pow': pow, 'print': print, 'range': range,
+                'reversed': reversed, 'round': round, 'set': set, 'slice': slice,
+                'sorted': sorted, 'str': str, 'sum': sum, 'tuple': tuple, 'type': type,
+                'zip': zip, 'None': None, 'True': True, 'False': False,
+                'Exception': Exception, 'ValueError': ValueError, 'KeyError': KeyError,
+                'TypeError': TypeError
+            }
+            global_scope = {
+                '__builtins__': safe_builtins,
+                'math': __import__('math'),
+                'json': __import__('json'),
+                're': __import__('re'),
+                'time': __import__('time'),
+                'datetime': __import__('datetime').datetime,
+                'random': __import__('random'),
+                'hashlib': __import__('hashlib')
+            }
+            exec(code_str, global_scope, local_scope)
+            handler = local_scope.get('handle') or local_scope.get('handler') or local_scope.get('main')
+            if callable(handler):
+                res_box[0] = handler(req_context)
+            elif 'result' in local_scope:
+                res_box[0] = local_scope['result']
+            else:
+                res_box[0] = {'output': '핸들러 함수(def handle(req):)를 정의하세요.'}
+        except Exception as e:
+            err_box[0] = e
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+    t.join(timeout=timeout_sec)
+    if t.is_alive():
+        return {'error': f'스크립트 실행 시간이 초과되었습니다 ({timeout_sec}초 초과).', 'code': 'TIMEOUT'}, 504
+    if err_box[0] is not None:
+        return {'error': f'Python 실행 오류: {str(err_box[0])}', 'code': 'SCRIPT_ERROR'}, 500
+    return res_box[0], 200
 
 @app.route('/api/custom-apis', methods=['GET'])
 def get_custom_apis():
@@ -1049,8 +1066,11 @@ def dispatch_custom_api(subpath):
                 'headers': {k: v for k, v in request.headers.items() if not k.lower().startswith(('x-forwarded', 'cookie'))},
                 'time': datetime.now().isoformat()
             }
-            res = execute_python_api(api_item.get('pythonCode', ''), req_ctx)
-            if isinstance(res, (dict, list)):
+            res, py_code = execute_python_api(api_item.get('pythonCode', ''), req_ctx)
+            if py_code != 200:
+                resp = jsonify(res)
+                status_code = py_code
+            elif isinstance(res, (dict, list)):
                 resp = jsonify(res)
             elif isinstance(res, (str, int, float, bool)):
                 resp = jsonify({'result': res})
@@ -1065,12 +1085,39 @@ def dispatch_custom_api(subpath):
                     'battery': get_battery_info(),
                     'timestamp': datetime.now().isoformat()
                 }
-            elif action == 'system_info':
+            elif action == 'storage':
+                total, used, free = shutil.disk_usage(STORAGE_DIR)
                 res = {
-                    'action': 'system_info',
+                    'action': 'storage',
+                    'total': total,
+                    'used': used,
+                    'free': free,
+                    'percent': round((used / total) * 100, 1) if total > 0 else 0,
+                    'totalFormatted': format_size(total),
+                    'usedFormatted': format_size(used),
+                    'freeFormatted': format_size(free),
+                    'storagePath': STORAGE_DIR,
+                    'timestamp': datetime.now().isoformat()
+                }
+            elif action in ('info', 'system_info'):
+                res = {
+                    'action': 'info',
+                    'platform': platform.system(),
+                    'release': platform.release(),
+                    'machine': platform.machine(),
+                    'pythonVersion': platform.python_version(),
                     'uptime': get_uptime_info(),
                     'memory': get_system_memory(),
                     'battery': get_battery_info(),
+                    'timestamp': datetime.now().isoformat()
+                }
+            elif action == 'ping':
+                res = {
+                    'action': 'ping',
+                    'status': 'pong',
+                    'uptime': get_uptime_info(),
+                    'serverStart': SERVER_START_TIME.isoformat() if hasattr(SERVER_START_TIME, 'isoformat') else str(SERVER_START_TIME),
+                    'version': APP_VERSION,
                     'timestamp': datetime.now().isoformat()
                 }
             else:

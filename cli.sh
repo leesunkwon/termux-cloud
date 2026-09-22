@@ -17,6 +17,7 @@ Pulse 전역 명령어
   termux-cloud restart [옵션]  재시작 (기본 백그라운드)
   termux-cloud status          서버 상태·주소·최근 로그
   termux-cloud tunnel [옵션]   Cloudflare Tunnel 외부 접속 (start, stop, status)
+  termux-cloud api             등록된 API 서비스 목록 확인
   termux-cloud logs            최근 로그 50줄
   termux-cloud logs -f         로그 실시간 보기 (Ctrl+C로 보기 종료)
   termux-cloud update [옵션]   Git 업데이트 후 재시작 (기본 백그라운드)
@@ -86,6 +87,37 @@ case "$ACTION" in
         ;;
     sync|up)
         exec bash "$SCRIPT_DIR/update.sh" --tunnel "$@"
+        ;;
+    api|apis)
+        pulse_python=$(command -v python3 || command -v python) || {
+            echo "Python이 없습니다." >&2
+            exit 1
+        }
+        "$pulse_python" -c '
+import json, os
+candidates = [
+    os.path.expanduser("~/.pulse/custom_apis.json"),
+    os.path.join(os.getcwd(), ".pulse", "custom_apis.json")
+]
+api_file = next((p for p in candidates if os.path.exists(p)), None)
+if not api_file:
+    print("등록된 API가 없습니다.")
+    exit(0)
+try:
+    with open(api_file, "r", encoding="utf-8") as f:
+        apis = json.load(f)
+except Exception as e:
+    print("API 파일을 읽을 수 없습니다:", e)
+    exit(1)
+print(f"=== Pulse 등록된 API 목록 ({len(apis)}개) ===")
+for a in apis:
+    st = "활성" if a.get("enabled", True) else "비활성"
+    m = a.get("method", "GET")
+    path = a.get("path", "")
+    mode = a.get("mode", "json")
+    nm = a.get("name", "")
+    print(f"[{st}] {m:<6} /api/fn/{path:<20} ({nm}) [{mode}]")
+'
         ;;
     logs)
         if [ ! -f "$SCRIPT_DIR/server.log" ]; then

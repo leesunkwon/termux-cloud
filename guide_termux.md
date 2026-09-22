@@ -1,4 +1,4 @@
-> **v1.5.0 업데이트 안내**: 최초 사용 또는 이전 버전에서 업그레이드할 때 프로젝트 폴더에서 `python3 setup-auth.py`로 관리자 계정을 등록한 뒤 `./stop.sh` → `./start.sh --bg`로 재시작하세요. 계정 없이 API에 접근할 수 없습니다. 외부 접속 시 HTTPS 또는 개인 VPN을 사용하고, HTTPS 전용 환경에서는 `PULSE_HTTPS=1`을 지정하세요. noVNC는 별도의 VNC 비밀번호와 접속 경로가 필요합니다. 최신 권한·파일·업데이트 동작은 [README.md](README.md)를 기준으로 합니다.
+> **v2.6.0 최신 버전 안내**: 최초 사용 또는 이전 버전에서 업그레이드할 때 프로젝트 폴더에서 `termux-cloud account`로 관리자 계정을 등록한 뒤 `termux-cloud sync` 또는 `termux-cloud --bg --tunnel`로 시작하세요. Cloudflare Tunnel을 통한 전 세계 무료 외부 접속 및 나만의 REST API를 제작하고 배포하는 **Pulse API Studio**가 기본 탑재되어 있습니다. 최신 권한·파일·업데이트 동작은 [README.md](README.md)를 기준으로 합니다.
 
 # 📱 갤럭시 스마트폰(Termux)을 나만의 iCloud 서버로 만드는 완벽 가이드
 
@@ -88,8 +88,10 @@ pkg update -y && pkg install -y git && git clone https://github.com/leesunkwon/t
 ```bash
 termux-cloud          # 포그라운드로 서버 실행
 termux-cloud --bg     # 백그라운드로 24시간 실행 (추천!)
-termux-cloud status   # 현재 서버 가동 여부 및 접속 주소 확인
-termux-cloud stop     # 서버 안전 종료
+termux-cloud sync     # 최신 Git 업데이트 + 서버 + Cloudflare 터널 동시 원클릭 시작!
+termux-cloud status   # 현재 서버 가동 여부 및 로컬/터널 접속 주소 확인
+termux-cloud api      # 등록된 나만의 API 서비스 목록 터미널 확인
+termux-cloud stop     # 서버 및 터널 안전 종료
 termux-cloud update   # GitHub 최신 코드로 자동 업데이트 및 재시작
 ```
 
@@ -127,6 +129,7 @@ pkg install cloudflared -y
 
 # 2. 서버와 외부 터널 동시 백그라운드 시작
 termux-cloud --bg --tunnel
+# (또는 최신 업데이트와 함께 원클릭 시작: termux-cloud sync)
 
 # 3. 외부 접속 주소 확인
 termux-cloud status
@@ -139,3 +142,18 @@ termux-cloud status
 ### 2) Tailscale (개인 기기 간 안전한 가상 사설망)
 1. 구글 플레이스토어에서 갤럭시 폰과 접속할 노트북/폰에 **Tailscale** 앱 설치
 2. 동일 구글 계정으로 로그인 후 갤럭시 폰의 Tailscale 고정 IP(예: `http://100.x.x.x:3000`)로 접속
+
+---
+
+## 🛠️ 8단계: 나만의 API 서비스 구축 및 배포 (Pulse API Studio)
+
+Pulse 웹 브라우저 접속 후 시작 화면에서 **"API 서비스"** 카드를 누르면 코딩 없이도 나만의 REST API 엔드포인트를 즉시 구축할 수 있습니다.
+
+1. **3가지 API 엔진 선택**:
+   - **JSON Mock**: 고정된 데이터를 초고속(1ms 미만)으로 반환하는 초경량 API.
+   - **Python 서버리스**: `def handle(req):` 함수를 작성하여 쿼리 파라미터, 요청 바디, 헤더를 파싱하고 연산 결과를 반환. (3초 안전 타임아웃 래퍼 내장)
+   - **스마트폰 디바이스 연동**: 스마트폰의 실시간 배터리 잔량, 충전 상태, 남은 저장공간, 시스템 사양, 헬스체크 핑을 JSON으로 반환.
+2. **원클릭 공유 및 실시간 테스트**:
+   - 로컬 URL(`http://내부IP:3000/api/fn/...`) 및 전 세계 접속 가능한 Cloudflare Tunnel URL(`https://xxx.trycloudflare.com/api/fn/...`)이 즉시 자동 생성됩니다.
+   - 우측 인스턴트 테스터 탭에서 [요청 전송] 버튼을 눌러 실시간 응답과 레이턴시(ms)를 즉시 테스트할 수 있습니다.
+   - 터미널에서 `termux-cloud api`를 실행하여 등록된 엔드포인트 목록을 빠르게 확인할 수 있습니다.

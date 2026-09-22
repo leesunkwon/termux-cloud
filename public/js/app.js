@@ -2937,25 +2937,37 @@
     let startX = 0, startY = 0;
     let startW = 0, startH = 0;
 
-    handle.addEventListener('mousedown', (e) => {
-      e.preventDefault();
+    const startResize = (clientX, clientY) => {
       isResizing = true;
-      startX = e.clientX;
-      startY = e.clientY;
+      startX = clientX;
+      startY = clientY;
       startW = win.offsetWidth;
       startH = win.offsetHeight;
       bringWindowToFront(win.getAttribute('data-app'));
+    };
+
+    const updateResize = (clientX, clientY) => {
+      if (!isResizing) return;
+      const newW = Math.max(300, startW + (clientX - startX));
+      const newH = Math.max(200, startH + (clientY - startY));
+      win.style.width = `${newW}px`;
+      win.style.height = `${newH}px`;
+    };
+
+    const stopResize = () => {
+      isResizing = false;
+    };
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      startResize(e.clientX, e.clientY);
 
       const onMouseMove = (ev) => {
-        if (!isResizing) return;
-        const newW = Math.max(300, startW + (ev.clientX - startX));
-        const newH = Math.max(200, startH + (ev.clientY - startY));
-        win.style.width = `${newW}px`;
-        win.style.height = `${newH}px`;
+        updateResize(ev.clientX, ev.clientY);
       };
 
       const onMouseUp = () => {
-        isResizing = false;
+        stopResize();
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
       };
@@ -2963,6 +2975,29 @@
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);
     });
+
+    handle.addEventListener('touchstart', (e) => {
+      if (!e.touches || e.touches.length === 0) return;
+      const touch = e.touches[0];
+      startResize(touch.clientX, touch.clientY);
+
+      const onTouchMove = (ev) => {
+        if (!ev.touches || ev.touches.length === 0) return;
+        ev.preventDefault();
+        updateResize(ev.touches[0].clientX, ev.touches[0].clientY);
+      };
+
+      const onTouchEnd = () => {
+        stopResize();
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onTouchEnd);
+        document.removeEventListener('touchcancel', onTouchEnd);
+      };
+
+      document.addEventListener('touchmove', onTouchMove, { passive: false });
+      document.addEventListener('touchend', onTouchEnd);
+      document.addEventListener('touchcancel', onTouchEnd);
+    }, { passive: true });
   }
 
   // [App 1: Terminal]
@@ -6911,39 +6946,6 @@
         statusPill.className = `api-status-pill ${api.enabled ? 'pill-active' : 'pill-inactive'}`;
       }
 
-      // Links
-      const localUrl = `${location.protocol}//${location.host}/api/fn/${api.path}`;
-      const tunnelUrl = tunnelHostUrl ? `${tunnelHostUrl}/api/fn/${api.path}` : '';
-      if (linkLocalUrl) linkLocalUrl.value = localUrl;
-      if (btnOpenLocal) btnOpenLocal.href = localUrl;
-
-      if (linkTunnelUrl) {
-        linkTunnelUrl.value = tunnelUrl;
-        if (!tunnelUrl) {
-          linkTunnelUrl.placeholder = '터널 가동 시 자동 발급 (termux-cloud --bg)';
-        }
-      }
-      if (btnOpenTunnel) {
-        if (tunnelUrl) {
-          btnOpenTunnel.href = tunnelUrl;
-          btnOpenTunnel.style.display = 'inline-flex';
-        } else {
-          btnOpenTunnel.style.display = 'none';
-        }
-      }
-
-      // cURL Command
-      const effectiveUrl = tunnelUrl || localUrl;
-      let curlCmd = `curl -X ${api.method || 'GET'} "${effectiveUrl}"`;
-      if (api.auth === 'key') {
-        curlCmd += ` -H "X-API-Key: ${api.apiKey || 'YOUR_API_KEY'}"`;
-      }
-      if (api.mode === 'json' && ['POST', 'PUT', 'PATCH'].includes(api.method)) {
-        const bodyContent = (api.jsonBody || '{}').replace(/\n/g, ' ').replace(/"/g, '\\"');
-        curlCmd += ` -H "Content-Type: application/json" -d "${bodyContent}"`;
-      }
-      if (curlCode) curlCode.textContent = curlCmd;
-
       // Inputs
       if (inputName) inputName.value = api.name || '';
       if (inputPath) inputPath.value = api.path || '';
@@ -6968,15 +6970,9 @@
       if (textareaPython) textareaPython.value = api.pythonCode || "def handle(req):\n    name = req.get('params', {}).get('name', 'World')\n    return {'message': f'Hello, {name}!'}\n";
       if (selectDeviceAction) selectDeviceAction.value = api.deviceAction || 'battery';
 
-      // Tester Sync
-      if (testerMethodBadge) {
-        testerMethodBadge.textContent = api.method || 'GET';
-        testerMethodBadge.className = `api-method-badge method-${(api.method || 'get').toLowerCase()}`;
-      }
-      if (testerUrlInput) testerUrlInput.value = localUrl;
-      if (testerBodyBox) {
-        testerBodyBox.classList.toggle('hidden', ['GET', 'DELETE'].includes(api.method));
-      }
+      // Update URLs, cURL and Tester
+      updateLiveUrlsAndCurl();
+
       if (testerBodyInput) {
         testerBodyInput.value = api.jsonBody || '{\n  "test": true\n}';
       }
@@ -6992,6 +6988,70 @@
       // Statusbar
       if (statusInfo) statusInfo.textContent = `엔드포인트: /api/fn/${api.path} · ${currentMode.toUpperCase()} 엔진`;
       if (callsInfo) callsInfo.textContent = `이 API ${api.calls || 0}회 호출됨 (최근: ${api.lastCalled ? api.lastCalled.split('T')[1].slice(0, 5) : '기록 없음'})`;
+    }
+
+    function updateLiveUrlsAndCurl() {
+      const curPath = (inputPath ? inputPath.value.trim() : '') || (activeApiId ? (currentApis.find(a => a.id === activeApiId)?.path || '') : 'my-api');
+      const curMethod = inputMethod ? inputMethod.value : 'GET';
+      const curAuth = inputAuth ? inputAuth.value : 'public';
+      const curKey = inputApiKey ? inputApiKey.value.trim() : '';
+
+      const viewMethodBadge = document.getElementById('api-view-method-badge');
+      const viewPath = document.getElementById('api-view-path');
+      if (viewMethodBadge) {
+        viewMethodBadge.textContent = curMethod;
+        viewMethodBadge.className = `api-method-badge method-${(curMethod || 'get').toLowerCase()}`;
+      }
+      if (viewPath) viewPath.textContent = curPath;
+
+      const localUrl = `${location.protocol}//${location.host}/api/fn/${curPath}`;
+      const tunnelUrl = tunnelHostUrl ? `${tunnelHostUrl}/api/fn/${curPath}` : '';
+
+      if (linkLocalUrl) linkLocalUrl.value = localUrl;
+      if (btnOpenLocal) btnOpenLocal.href = localUrl;
+
+      if (linkTunnelUrl) {
+        linkTunnelUrl.value = tunnelUrl;
+        if (!tunnelUrl) {
+          linkTunnelUrl.placeholder = '터널 가동 시 자동 발급 (termux-cloud --bg)';
+        }
+      }
+      if (btnOpenTunnel) {
+        if (tunnelUrl) {
+          btnOpenTunnel.href = tunnelUrl;
+          btnOpenTunnel.style.display = 'inline-flex';
+        } else {
+          btnOpenTunnel.style.display = 'none';
+        }
+      }
+
+      // cURL Command
+      const effectiveUrl = tunnelUrl || localUrl;
+      let curlCmd = `curl -X ${curMethod} "${effectiveUrl}"`;
+      if (curAuth === 'key') {
+        curlCmd += ` -H "X-API-Key: ${curKey || 'YOUR_API_KEY'}"`;
+      }
+      const selectedRadio = document.querySelector('input[name="api-mode-radio"]:checked');
+      const curMode = selectedRadio ? selectedRadio.value : 'json';
+      if (curMode === 'json' && ['POST', 'PUT', 'PATCH'].includes(curMethod)) {
+        const bodyContent = ((textareaJson ? textareaJson.value : '{}') || '{}').replace(/\n/g, ' ').replace(/"/g, '\\"');
+        curlCmd += ` -H "Content-Type: application/json" -d "${bodyContent}"`;
+      }
+      if (curlCode) curlCode.textContent = curlCmd;
+
+      // Tester Sync
+      if (testerMethodBadge) {
+        testerMethodBadge.textContent = curMethod;
+        testerMethodBadge.className = `api-method-badge method-${(curMethod || 'get').toLowerCase()}`;
+      }
+      if (testerUrlInput) {
+        const queryStr = testerQueryInput ? testerQueryInput.value.trim() : '';
+        const cleanQuery = queryStr ? (queryStr.startsWith('?') ? queryStr : '?' + queryStr) : '';
+        testerUrlInput.value = `/api/fn/${curPath}${cleanQuery}`;
+      }
+      if (testerBodyBox) {
+        testerBodyBox.classList.toggle('hidden', ['GET', 'DELETE'].includes(curMethod));
+      }
     }
 
     function showModeEditor(mode) {
@@ -7029,24 +7089,13 @@
       if (textareaPython) textareaPython.value = "def handle(req):\n    # req['params'], req['body'], req['method'] 활용 가능\n    return {\n        'status': 'ok',\n        'time': req.get('time')\n    }\n";
       if (selectDeviceAction) selectDeviceAction.value = 'battery';
 
-      // Header Topbar
-      const viewMethodBadge = document.getElementById('api-view-method-badge');
-      const viewPath = document.getElementById('api-view-path');
-      if (viewMethodBadge) {
-        viewMethodBadge.textContent = 'GET';
-        viewMethodBadge.className = 'api-method-badge method-get';
-      }
-      if (viewPath) viewPath.textContent = defaultPath;
       if (statusPill) {
         statusPill.textContent = '신규';
         statusPill.className = 'api-status-pill pill-active';
       }
 
-      // Links preview
-      const localUrl = `${location.protocol}//${location.host}/api/fn/${defaultPath}`;
-      if (linkLocalUrl) linkLocalUrl.value = localUrl;
-      if (linkTunnelUrl) linkTunnelUrl.value = tunnelHostUrl ? `${tunnelHostUrl}/api/fn/${defaultPath}` : '';
-      if (curlCode) curlCode.textContent = `curl -X GET "${tunnelHostUrl ? `${tunnelHostUrl}/api/fn/${defaultPath}` : localUrl}"`;
+      // Live links and curl preview
+      updateLiveUrlsAndCurl();
 
       if (inputName) inputName.focus();
     }
@@ -7255,17 +7304,26 @@
     if (btnDelete) btnDelete.addEventListener('click', deleteApi);
     if (statusPill) statusPill.addEventListener('click', toggleStatus);
 
+    if (inputPath) inputPath.addEventListener('input', updateLiveUrlsAndCurl);
+    if (inputMethod) inputMethod.addEventListener('change', updateLiveUrlsAndCurl);
+
     if (inputAuth) {
       inputAuth.addEventListener('change', () => {
         if (keyContainer) keyContainer.classList.toggle('hidden', inputAuth.value !== 'key');
+        updateLiveUrlsAndCurl();
       });
     }
+
+    if (inputApiKey) inputApiKey.addEventListener('input', updateLiveUrlsAndCurl);
+    if (testerQueryInput) testerQueryInput.addEventListener('input', updateLiveUrlsAndCurl);
+    if (textareaJson) textareaJson.addEventListener('input', updateLiveUrlsAndCurl);
 
     if (btnGenApiKey) {
       btnGenApiKey.addEventListener('click', () => {
         const rand = Array.from(crypto.getRandomValues(new Uint8Array(12)))
           .map(b => b.toString(16).padStart(2, '0')).join('');
         if (inputApiKey) inputApiKey.value = `sk_live_${rand}`;
+        updateLiveUrlsAndCurl();
         showToast('새로운 API Key가 생성되었습니다.');
       });
     }
@@ -7275,6 +7333,7 @@
         try {
           const parsed = JSON.parse(textareaJson.value);
           textareaJson.value = JSON.stringify(parsed, null, 2);
+          updateLiveUrlsAndCurl();
           showToast('JSON 정렬 완료');
         } catch (e) {
           showToast('유효하지 않은 JSON입니다: ' + e.message);
@@ -7289,6 +7348,7 @@
           if (card) card.classList.toggle('selected', r.checked);
         });
         showModeEditor(e.target.value);
+        updateLiveUrlsAndCurl();
       });
     });
 

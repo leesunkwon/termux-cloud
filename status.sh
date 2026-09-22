@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-#  ☁️  iCloud Personal Server - 서버 상태 확인 스크립트 (status.sh)
+#  ⚡  Pulse (Cloud & OS) Server - 서버 상태 확인 스크립트 (status.sh)
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -62,6 +62,16 @@ if [ "$RUNNING" = true ]; then
                 echo -e " 외부(인터넷): ${YELLOW}Cloudflare Tunnel 주소 발급 대기 중... (PID: ${TUNNEL_PID})${NC}"
             fi
         fi
+    fi
+
+    # 등록된 API 개수 요약
+    API_FILE="$SCRIPT_DIR/.pulse/custom_apis.json"
+    if [ ! -f "$API_FILE" ]; then
+        API_FILE="$HOME/.pulse/custom_apis.json"
+    fi
+    if [ -f "$API_FILE" ] && command -v python3 &>/dev/null; then
+        API_COUNT=$(python3 -c "import json; print(len(json.load(open('$API_FILE'))))" 2>/dev/null || echo "0")
+        echo -e " API 서비스 : ${CYAN}${API_COUNT}개 등록됨${NC} (확인: termux-cloud api)"
     fi
     
     # 프로세스 상세 정보 (메모리, CPU)
