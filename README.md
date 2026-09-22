@@ -1,7 +1,11 @@
 # ⚡ Pulse — 스마트폰 개인 클라우드와 웹 데스크톱
 
 Pulse는 남는 안드로이드 스마트폰을 Termux에서 개인 서버로 사용하는 프로젝트입니다.
-현재 버전은 **v2.1.0**입니다. Python/Flask 단일 서버가 Pulse Cloud와 Pulse OS를 제공합니다.
+현재 버전은 **v2.4.0**입니다. Python/Flask 단일 서버가 Pulse Cloud와 Pulse OS를 제공합니다.
+
+> **v2.4.0 신규**: 📷 **Pulse Cam** (스마트폰 원격 홈캠 / CCTV 실시간 모니터 및 `uploads/Camera/` 스냅샷 보관)  
+> **v2.3.0**: 📋 Clipboard 히스토리, 🔖 즐겨찾기 & 7색 태그, 🔗 안전 파일 공유 링크 생성 (`/s/<id>`), 🌙 Focus Mode (방해 금지 & 뽀모도로 타이머)  
+> **v2.2.0**: 📸 Pulse Photos, 📦 ZIP 압축/해제, 🗓️ Calendar 위젯, ⌨️ 단축키 치트시트
 
 ## 설치 및 최초 로그인
 
@@ -111,6 +115,9 @@ python3 -m pip install Pillow  # 선택 사항. Termux에서는 빌드 의존성
 
 ## Pulse OS (가상 웹 데스크톱)
 
+- **📷 Pulse Cam (스마트폰 원격 홈캠 / CCTV)**: 스마트폰 카메라를 활용한 실시간 원격 영상 모니터링 창, CCTV OSD 오버레이, 스냅샷 캡처 시 `uploads/Camera/` 폴더에 즉시 저장.
+- **📸 Pulse Photos**: 날짜별(월별) 사진 갤러리, 전체화면 라이트박스 및 슬라이드쇼.
+- **📋 Clipboard 히스토리**: 복사한 텍스트 실시간 감지 및 영구 저장, 핀 고정 및 검색.
 - **🔍 Spotlight 전역 검색 & 런처 (`Ctrl+Space`)**: 키보드 단축키로 앱 즉시 실행, 수식 계산, 파일 검색, 시스템 명령 실행.
 - **👁️ Quick Look 빠른 파일 미리보기 (`Space`)**: Finder 또는 바탕화면에서 스페이스바로 이미지, 영상, 오디오, 텍스트/코드 즉시 팝업 및 방향키 연속 탐색.
 - **🪟 Mission Control 멀티태스킹 뷰 (`F3`)**: 열려 있는 모든 창을 한눈에 볼 수 있는 부드러운 타일링 배치 및 1클릭 창 전환.

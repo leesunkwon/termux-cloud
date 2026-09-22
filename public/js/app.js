@@ -108,6 +108,7 @@
     mobileMenuBtn: document.getElementById('mobile-menu-btn'),
     navItems: document.querySelectorAll('.nav-item'),
     countAll: document.getElementById('count-all'),
+    countFavorite: document.getElementById('count-favorite'),
     countFolder: document.getElementById('count-folder'),
     countImage: document.getElementById('count-image'),
     countVideo: document.getElementById('count-video'),
@@ -208,6 +209,18 @@
     setupDropZone();
     applyViewMode(state.viewMode);
     setupDesktopEnvironment();
+    // v2.2.0 신규 기능 초기화
+    setupZipTools();
+    initPhotos();
+    initCalendar();
+    initShortcutsModal();
+    // v2.3.0 신규 기능 초기화
+    initClipboardApp();
+    initFocusMode();
+    initShareModal();
+    initTagFilterListeners();
+    // v2.4.0 신규 기능 초기화
+    initPulseCam();
 
     // Initial Hash Routing or Default to Portal
     const hash = window.location.hash.replace('#', '');
@@ -972,6 +985,8 @@
         label.textContent = state.selected.size ? `선택 해제 (${state.selected.size})` : '전체 선택';
       }
     });
+    // ZIP 버튼 업데이트
+    updateZipButton();
   }
   async function fileAction(action) {
     try {
@@ -1249,6 +1264,7 @@
   function updateCounts() {
     const counts = state.counts;
     if (el.countAll) el.countAll.textContent = counts.all;
+    if (el.countFavorite) el.countFavorite.textContent = counts.favorite || 0;
     if (el.countFolder) el.countFolder.textContent = counts.folder || 0;
     if (el.countImage) el.countImage.textContent = counts.image;
     if (el.countVideo) el.countVideo.textContent = counts.video;
@@ -1260,6 +1276,14 @@
   function updateTitle() {
     const titles = {
       all: '모든 파일',
+      favorite: '즐겨찾기',
+      'tag:red': '빨강 태그',
+      'tag:orange': '주황 태그',
+      'tag:yellow': '노랑 태그',
+      'tag:green': '초록 태그',
+      'tag:blue': '파랑 태그',
+      'tag:purple': '보라 태그',
+      'tag:gray': '회색 태그',
       folder: '폴더',
       image: '사진',
       video: '비디오',
@@ -1358,7 +1382,12 @@
         `;
       }
 
+      const tagDots = (file.tags || []).map(t => `<span class="file-tag-dot tag-${escapeHtml(t)}"></span>`).join('');
+
       card.innerHTML = `
+        <button class="file-card-favorite-btn ${file.favorite ? 'is-fav' : ''}" title="${file.favorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}" data-action="favorite">
+          ★
+        </button>
         <div class="file-thumbnail-wrap">
           ${thumbContent}
           <div class="file-card-actions">
@@ -1380,12 +1409,22 @@
             <span class="file-meta-size">${file.sizeFormatted}</span>
             <span class="file-meta-date">${file.dateFormatted}</span>
           </div>
+          ${tagDots ? `<div class="file-card-tags">${tagDots}</div>` : ''}
         </div>
       `;
 
+      const btnFav = card.querySelector('.file-card-favorite-btn');
       const btnOpen = card.querySelector('.btn-open');
       const btnDl = card.querySelector('.btn-dl');
       const btnDel = card.querySelector('.btn-del');
+
+      if (btnFav) {
+        btnFav.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          toggleFavorite(file.path);
+        });
+      }
 
       if (btnOpen) {
         btnOpen.addEventListener('click', (e) => {
@@ -1457,14 +1496,17 @@
       const tr = document.createElement('tr');
       const isFolder = file.type === 'folder';
       tr.className = isFolder ? 'file-row file-row-folder' : 'file-row';
+      const tagDots = (file.tags || []).map(t => `<span class="file-tag-dot tag-${escapeHtml(t)}"></span>`).join('');
 
       tr.innerHTML = `
         <td class="col-name">
           <div class="list-name-wrap">
+            <button class="list-favorite-btn ${file.favorite ? 'is-fav' : ''}" data-action="favorite" title="${file.favorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}">★</button>
             <span class="list-type-icon ${file.type}-color">
               ${getFileTypeIconSvg(file.type)}
             </span>
             <span class="list-filename" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+            ${tagDots ? `<div class="list-tag-dots">${tagDots}</div>` : ''}
           </div>
         </td>
         <td class="col-type">${getTypeLabel(file.type)}</td>
@@ -1489,10 +1531,19 @@
         </td>
       `;
 
+      const btnFav = tr.querySelector('.list-favorite-btn');
       const btnOpen = tr.querySelector('.btn-open');
       const btnView = tr.querySelector('.btn-view');
       const btnDl = tr.querySelector('.btn-dl');
       const btnDel = tr.querySelector('.btn-del');
+
+      if (btnFav) {
+        btnFav.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          toggleFavorite(file.path);
+        });
+      }
 
       if (btnOpen) {
         btnOpen.addEventListener('click', (e) => {
@@ -2044,10 +2095,15 @@
         finderItem.classList.add('selected');
 
         const isDir = file.type === 'folder';
+        const isZip = !isDir && (file.extension === 'zip');
         ctxMenu.innerHTML = `
           <div class="ctx-item" data-action="open">
             <span class="ctx-icon">${isDir ? '📂' : (file.isText ? '📝' : '👁️')}</span>
             <span class="ctx-label">${isDir ? '열기' : (file.isText ? '에디터로 편집' : '미리보기')}</span>
+          </div>
+          <div class="ctx-item" data-action="favorite">
+            <span class="ctx-icon">${file.favorite ? '★' : '☆'}</span>
+            <span class="ctx-label">${file.favorite ? '즐겨찾기 해제' : '즐겨찾기에 추가'}</span>
           </div>
           ${!isDir ? `
           <div class="ctx-item" data-action="quicklook">
@@ -2058,7 +2114,16 @@
           <div class="ctx-item" data-action="download">
             <span class="ctx-icon">⬇️</span>
             <span class="ctx-label">다운로드</span>
-          </div>` : ''}
+          </div>
+          <div class="ctx-item" data-action="share">
+            <span class="ctx-icon">🔗</span>
+            <span class="ctx-label">공유 링크 생성</span>
+          </div>
+          ${isZip && Pulse.isAdmin ? `
+          <div class="ctx-item" data-action="unzip">
+            <span class="ctx-icon">📦</span>
+            <span class="ctx-label">여기에 압축 해제</span>
+          </div>` : ''}` : ''}
           ${Pulse.isAdmin ? `
           <div class="ctx-divider"></div>
           <div class="ctx-item" data-action="rename">
@@ -2087,6 +2152,10 @@
                 const idx = state.files.findIndex(f => f.path === file.path);
                 if (idx !== -1) openPreview(idx);
               }
+            } else if (action === 'favorite') {
+              toggleFavorite(file.path);
+            } else if (action === 'share') {
+              openShareModal(file);
             } else if (action === 'quicklook') {
               openQuickLook(file, state.files);
             } else if (action === 'download') {
@@ -2123,6 +2192,8 @@
               } catch (err) {
                 showToast('삭제 실패: ' + err.message);
               }
+            } else if (action === 'unzip') {
+              await unzipFile(file.path);
             }
           });
         });
@@ -2543,6 +2614,9 @@
         else if (appId === 'notes') { win.style.width = '720px'; win.style.height = '460px'; }
         else if (appId === 'calculator') { win.style.width = '280px'; win.style.height = '380px'; }
         else if (appId === 'trash') { win.style.width = '520px'; win.style.height = '380px'; }
+        else if (appId === 'photos') { win.style.width = '820px'; win.style.height = '520px'; }
+        else if (appId === 'clipboard') { win.style.width = '420px'; win.style.height = '500px'; }
+        else if (appId === 'cam') { win.style.width = '620px'; win.style.height = '510px'; }
       }
       win.dataset.positioned = 'true';
     }
@@ -2573,6 +2647,12 @@
       if (typeof loadNotesList === 'function') loadNotesList();
     } else if (appId === 'trash') {
       if (typeof renderOsTrash === 'function') renderOsTrash();
+    } else if (appId === 'photos') {
+      loadPhotos();
+    } else if (appId === 'clipboard') {
+      renderClipboardHistory();
+    } else if (appId === 'cam') {
+      startPulseCam();
     }
   }
 
@@ -2595,6 +2675,9 @@
         const playBtn = document.getElementById('btn-music-play');
         if (playBtn) playBtn.textContent = '▶';
       }
+    }
+    if (appId === 'cam') {
+      stopPulseCam();
     }
     const win = document.getElementById('win-' + appId);
     if (!win) return;
@@ -2659,6 +2742,9 @@
       notes: 'Pulse Notes',
       calculator: '계산기',
       trash: '휴지통',
+      photos: 'Pulse Photos',
+      clipboard: '클립보드',
+      cam: 'Pulse Cam',
       settings: 'Pulse OS 설정',
       about: 'Pulse OS 정보'
     };
@@ -3782,11 +3868,16 @@
         { id: 'calculator', name: '계산기', en: 'calculator calc math', icon: '🧮', desc: '계산기' },
         { id: 'trash', name: '휴지통', en: 'trash bin recycle', icon: '🗑️', desc: '삭제한 파일 복원', admin: true },
         { id: 'music', name: 'Pulse 음악', en: 'music audio player mp3', icon: '🎵', desc: '보관함 미디어 플레이어' },
+        { id: 'photos', name: 'Pulse Photos', en: 'photos gallery image picture camera', icon: '📸', desc: '날짜별 사진 갤러리' },
+        { id: 'clipboard', name: '클립보드 히스토리', en: 'clipboard clip history copy paste', icon: '📋', desc: '복사한 텍스트 기록 및 핀 보관함' },
+        { id: 'cam', name: 'Pulse Cam', en: 'cam camera cctv homecam webcam 홈캠 카메라', icon: '📷', desc: '스마트폰 원격 홈캠 / CCTV 모니터' },
         { id: 'monitor', name: 'Pulse 모니터', en: 'monitor activity resource cpu ram', icon: '📊', desc: '시스템 리소스 실시간 모니터' },
         { id: 'browser', name: 'Pulse 브라우저', en: 'browser web net', icon: '🌐', desc: '웹 사이트 브라우저' },
         { id: 'linux', name: 'Linux 데스크톱', en: 'linux vnc gui xfce desktop', icon: '🐧', desc: 'Termux XFCE4 GUI', admin: true },
         { id: 'settings', name: 'Pulse OS 설정', en: 'settings wallpaper preferences theme', icon: '⚙️', desc: '배경화면 및 환경설정' },
-        { id: 'about', name: 'Pulse OS 정보', en: 'about system pulse info', icon: '⚡', desc: 'Pulse OS 시스템 사양 및 버전' }
+        { id: 'about', name: 'Pulse OS 정보', en: 'about system pulse info', icon: '⚡', desc: 'Pulse OS 시스템 사양 및 버전' },
+        { id: '__focus', name: '집중 모드 (Focus Mode)', en: 'focus mode pomodoro dnd timer 방해금지', icon: '🌙', desc: '방해 금지 및 25분 집중 타이머 토글' },
+        { id: '__shortcuts', name: '단축키 보기', en: 'shortcuts keybindings keyboard help', icon: '⌨️', desc: 'Pulse OS 전체 단축키 목록 (Ctrl+/)' },
       ];
 
       const qLower = query.toLowerCase();
@@ -3807,7 +3898,11 @@
         matchedApps.forEach(app => {
           const item = {
             type: 'app',
-            action: () => openDesktopWindow(app.id)
+            action: () => {
+              if (app.id === '__shortcuts') openShortcutsModal();
+              else if (app.id === '__focus') toggleFocusMode();
+              else openDesktopWindow(app.id);
+            }
           };
           currentItems.push(item);
           const itemIdx = currentItems.length - 1;
@@ -5136,9 +5231,10 @@
   // ================= Utilities =================
   async function copyToClipboard(text) {
     if (text == null || text === '') return false;
+    let ok = false;
     try {
       await navigator.clipboard.writeText(String(text));
-      return true;
+      ok = true;
     } catch (_) {
       const ta = document.createElement('textarea');
       ta.value = String(text);
@@ -5147,13 +5243,23 @@
       ta.style.left = '-9999px';
       document.body.appendChild(ta);
       ta.select();
-      const ok = document.execCommand('copy');
+      ok = document.execCommand('copy');
       document.body.removeChild(ta);
-      return ok;
     }
+    if (ok && typeof addClipboardHistory === 'function') {
+      addClipboardHistory(String(text));
+    }
+    return ok;
   }
 
   function showToast(message, retry, actionLabel = '다시 시도') {
+    // Focus Mode(집중 모드) 활성화 시 방해를 방지하기 위해 팝업 차단하고 알림 센터에만 기록
+    if (state.focusMode && !retry) {
+      if (typeof addNotificationCenterItem === 'function') {
+        addNotificationCenterItem('집중 모드 알림', message);
+      }
+      return;
+    }
     const toast = document.createElement('div');
     toast.className = 'toast';
     const icon = retry
@@ -5216,6 +5322,1339 @@
       .replace(/'/g, '&#039;');
   }
 
+  // ==========================================================================
+  // 📸 Pulse Photos — 날짜별 사진 갤러리 앱
+  // ==========================================================================
+  let photosData = { groups: [], total: 0 };
+  let photosCurrentView = 'all';
+  let photosLightboxList = [];
+  let photosLightboxIdx = 0;
+
+  async function loadPhotos() {
+    const loading = document.getElementById('photos-loading');
+    const empty = document.getElementById('photos-empty');
+    const container = document.getElementById('photos-grid-container');
+    const badge = document.getElementById('photos-count-badge');
+    if (!container) return;
+    if (loading) loading.classList.remove('hidden');
+    if (empty) empty.classList.add('hidden');
+    container.innerHTML = '';
+    try {
+      const data = await Pulse.api('/api/photos');
+      photosData = data;
+      if (badge) badge.textContent = `사진 ${data.total}장`;
+      renderPhotos(photosCurrentView);
+    } catch (e) {
+      showToast('사진 목록 로드 실패', () => loadPhotos());
+    } finally {
+      if (loading) loading.classList.add('hidden');
+    }
+  }
+
+  function renderPhotos(view) {
+    photosCurrentView = view;
+    const container = document.getElementById('photos-grid-container');
+    const empty = document.getElementById('photos-empty');
+    if (!container) return;
+    container.innerHTML = '';
+
+    let groups = photosData.groups || [];
+    if (view === 'recent') {
+      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      groups = groups.map(g => ({
+        ...g,
+        photos: g.photos.filter(p => p.modified >= cutoff)
+      })).filter(g => g.photos.length > 0);
+    }
+
+    const allPhotos = groups.flatMap(g => g.photos);
+    photosLightboxList = allPhotos;
+
+    if (allPhotos.length === 0) {
+      if (empty) empty.classList.remove('hidden');
+      return;
+    }
+    if (empty) empty.classList.add('hidden');
+
+    groups.forEach(group => {
+      const header = document.createElement('div');
+      header.className = 'photos-group-header';
+      header.textContent = group.label + ` (${group.photos.length}장)`;
+      container.appendChild(header);
+
+      const grid = document.createElement('div');
+      grid.className = 'photos-thumb-grid';
+      group.photos.forEach((photo, localIdx) => {
+        const globalIdx = allPhotos.indexOf(photo);
+        const thumb = document.createElement('div');
+        thumb.className = 'photos-thumb';
+        thumb.title = photo.name;
+        thumb.innerHTML = `<img src="${escapeHtml(photo.thumbnailUrl)}" alt="${escapeHtml(photo.name)}" loading="lazy">`;
+        thumb.addEventListener('click', () => openPhotosLightbox(globalIdx));
+        grid.appendChild(thumb);
+      });
+      container.appendChild(grid);
+    });
+  }
+
+  function openPhotosLightbox(idx) {
+    const lb = document.getElementById('photos-lightbox');
+    if (!lb || photosLightboxList.length === 0) return;
+    photosLightboxIdx = Math.max(0, Math.min(idx, photosLightboxList.length - 1));
+    lb.classList.remove('hidden');
+    renderPhotosLightbox();
+  }
+
+  function renderPhotosLightbox() {
+    const photo = photosLightboxList[photosLightboxIdx];
+    if (!photo) return;
+    const img = document.getElementById('photos-lb-img');
+    const name = document.getElementById('photos-lb-name');
+    const info = document.getElementById('photos-lb-info');
+    const dl = document.getElementById('photos-lb-download');
+    const counter = document.getElementById('photos-lb-counter');
+    if (img) { img.src = photo.previewUrl; img.alt = photo.name; }
+    if (name) name.textContent = photo.name;
+    if (info) info.textContent = photo.dateFormatted + ' · ' + photo.sizeFormatted;
+    if (dl) { dl.href = photo.downloadUrl; dl.download = photo.name; }
+    if (counter) counter.textContent = `${photosLightboxIdx + 1} / ${photosLightboxList.length}`;
+  }
+
+  function closePhotosLightbox() {
+    const lb = document.getElementById('photos-lightbox');
+    if (lb) lb.classList.add('hidden');
+  }
+
+  function initPhotos() {
+    // Photos 사이드바 필터
+    document.querySelectorAll('[data-photos-view]').forEach(item => {
+      item.addEventListener('click', () => {
+        const view = item.dataset.photosView;
+        if (view === 'slideshow') { startPhotosSlideshow(); return; }
+        document.querySelectorAll('[data-photos-view]').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+        renderPhotos(view);
+      });
+    });
+
+    // 새로고침
+    const refreshBtn = document.getElementById('btn-photos-refresh');
+    if (refreshBtn) refreshBtn.addEventListener('click', loadPhotos);
+
+    // 라이트박스 내비게이션
+    const lbClose = document.getElementById('photos-lb-close');
+    const lbPrev = document.getElementById('photos-lb-prev');
+    const lbNext = document.getElementById('photos-lb-next');
+    const lbBackdrop = document.getElementById('photos-lb-backdrop');
+    if (lbClose) lbClose.addEventListener('click', closePhotosLightbox);
+    if (lbBackdrop) lbBackdrop.addEventListener('click', closePhotosLightbox);
+    if (lbPrev) lbPrev.addEventListener('click', () => {
+      photosLightboxIdx = (photosLightboxIdx - 1 + photosLightboxList.length) % photosLightboxList.length;
+      renderPhotosLightbox();
+    });
+    if (lbNext) lbNext.addEventListener('click', () => {
+      photosLightboxIdx = (photosLightboxIdx + 1) % photosLightboxList.length;
+      renderPhotosLightbox();
+    });
+
+    // 키보드 내비게이션 (라이트박스 열려 있을 때)
+    document.addEventListener('keydown', (e) => {
+      const lb = document.getElementById('photos-lightbox');
+      if (!lb || lb.classList.contains('hidden')) return;
+      if (e.key === 'Escape') { closePhotosLightbox(); return; }
+      if (e.key === 'ArrowLeft') {
+        photosLightboxIdx = (photosLightboxIdx - 1 + photosLightboxList.length) % photosLightboxList.length;
+        renderPhotosLightbox();
+      } else if (e.key === 'ArrowRight') {
+        photosLightboxIdx = (photosLightboxIdx + 1) % photosLightboxList.length;
+        renderPhotosLightbox();
+      }
+    });
+  }
+
+  let slideshowTimer = null;
+  function startPhotosSlideshow() {
+    if (photosLightboxList.length === 0) { showToast('슬라이드쇼를 시작할 사진이 없습니다.'); return; }
+    openPhotosLightbox(0);
+    slideshowTimer = setInterval(() => {
+      photosLightboxIdx = (photosLightboxIdx + 1) % photosLightboxList.length;
+      renderPhotosLightbox();
+    }, 3000);
+    const lbClose = document.getElementById('photos-lb-close');
+    if (lbClose) {
+      const origClose = lbClose.onclick;
+      lbClose.onclick = () => { clearInterval(slideshowTimer); closePhotosLightbox(); lbClose.onclick = origClose; };
+    }
+  }
+
+  // ==========================================================================
+  // 📦 ZIP 압축 다운로드 / 압축 해제
+  // ==========================================================================
+  function setupZipTools() {
+    const btnZip = document.getElementById('btn-zip-download');
+    if (btnZip) {
+      btnZip.addEventListener('click', () => {
+        const paths = Array.from(state.selected);
+        if (paths.length === 0) { showToast('다운로드할 파일을 선택하세요.'); return; }
+        downloadZip(paths);
+      });
+    }
+  }
+
+  async function downloadZip(paths) {
+    if (!paths || paths.length === 0) return;
+    showToast(`ZIP 파일 생성 중... (${paths.length}개)`);
+    try {
+      const res = await fetch('/api/zip-download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': Pulse.csrf },
+        body: JSON.stringify({ paths })
+      });
+      if (!res.ok) throw new Error('ZIP 생성 실패');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const cd = res.headers.get('Content-Disposition') || '';
+      const match = cd.match(/filename\*?=(?:UTF-8'')?([^;\n]+)/i);
+      a.download = match ? decodeURIComponent(match[1].replace(/"/g, '')) : 'Pulse-선택파일.zip';
+      a.href = url;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast('ZIP 다운로드 완료 ✓');
+    } catch (e) {
+      showToast('ZIP 다운로드 실패: ' + e.message, () => downloadZip(paths));
+    }
+  }
+
+  async function unzipFile(path) {
+    try {
+      showToast('ZIP 압축 해제 중...');
+      const res = await Pulse.api('/api/unzip', {
+        method: 'POST',
+        body: JSON.stringify({ path })
+      });
+      showToast(`압축 해제 완료 ✓ (${res.extracted}개 파일)`);
+      fetchFiles();
+      renderFinderFiles();
+    } catch (e) {
+      showToast('압축 해제 실패: ' + e.message);
+    }
+  }
+
+  // ZIP 버튼 선택 상태에 따라 보이기/숨기기
+  function updateZipButton() {
+    const btn = document.getElementById('btn-zip-download');
+    if (!btn || !Pulse.isAdmin) return;
+    btn.classList.toggle('hidden', state.selected.size === 0);
+  }
+
+  // ==========================================================================
+  // 🗓️ Calendar 위젯
+  // ==========================================================================
+  let calYear = new Date().getFullYear();
+  let calMonth = new Date().getMonth();
+  let calSelectedDate = null;
+  let calEvents = {};
+
+  function initCalendar() {
+    // localStorage에서 일정 로드
+    try { calEvents = JSON.parse(localStorage.getItem('pulse_cal_events') || '{}'); } catch { calEvents = {}; }
+
+    // 메뉴바 시계 클릭 → 팝오버 토글
+    const clock = document.getElementById('desktop-clock');
+    if (clock) {
+      clock.style.cursor = 'pointer';
+      clock.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleCalendarPopover();
+      });
+    }
+
+    // 이전/다음 달 버튼
+    const prevBtn = document.getElementById('cal-prev-btn');
+    const nextBtn = document.getElementById('cal-next-btn');
+    if (prevBtn) prevBtn.addEventListener('click', () => { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } renderCalendar(); });
+    if (nextBtn) nextBtn.addEventListener('click', () => { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } renderCalendar(); });
+
+    // 일정 추가 버튼
+    const addBtn = document.getElementById('cal-add-event-btn');
+    const form = document.getElementById('cal-event-form');
+    const cancelBtn = document.getElementById('cal-event-cancel-btn');
+    if (addBtn) addBtn.addEventListener('click', () => { if (form) form.classList.toggle('hidden'); setTimeout(() => document.getElementById('cal-event-input')?.focus(), 50); });
+    if (cancelBtn) cancelBtn.addEventListener('click', () => { if (form) form.classList.add('hidden'); });
+    if (form) {
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = document.getElementById('cal-event-input');
+        const text = input?.value?.trim();
+        if (!text || !calSelectedDate) return;
+        if (!calEvents[calSelectedDate]) calEvents[calSelectedDate] = [];
+        calEvents[calSelectedDate].push(text);
+        saveCalEvents();
+        input.value = '';
+        form.classList.add('hidden');
+        renderCalendar();
+        renderCalEvents();
+      });
+    }
+
+    // 팝오버 외부 클릭 시 닫기
+    document.addEventListener('click', (e) => {
+      const pop = document.getElementById('calendar-popover');
+      const clock2 = document.getElementById('desktop-clock');
+      if (pop && !pop.contains(e.target) && !clock2?.contains(e.target)) {
+        pop.classList.add('hidden');
+      }
+    });
+
+    renderCalendar();
+  }
+
+  function toggleCalendarPopover() {
+    const pop = document.getElementById('calendar-popover');
+    if (!pop) return;
+    // Control Center 등 다른 팝오버 닫기
+    document.getElementById('desktop-control-center-popover')?.classList.add('hidden');
+    document.getElementById('desktop-notify-popover')?.classList.add('hidden');
+    pop.classList.toggle('hidden');
+    if (!pop.classList.contains('hidden')) renderCalendar();
+  }
+
+  function renderCalendar() {
+    const grid = document.getElementById('cal-grid');
+    const label = document.getElementById('cal-month-label');
+    if (!grid) return;
+    const monthNames = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+    if (label) label.textContent = `${calYear}년 ${monthNames[calMonth]}`;
+    grid.innerHTML = '';
+    const firstDay = new Date(calYear, calMonth, 1).getDay();
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+    for (let i = 0; i < firstDay; i++) {
+      const blank = document.createElement('div');
+      blank.className = 'cal-day cal-day-blank';
+      grid.appendChild(blank);
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const cell = document.createElement('div');
+      cell.className = 'cal-day';
+      if (dateStr === todayStr) cell.classList.add('cal-day-today');
+      if (dateStr === calSelectedDate) cell.classList.add('cal-day-selected');
+      if (calEvents[dateStr] && calEvents[dateStr].length > 0) cell.classList.add('cal-day-has-event');
+      cell.textContent = d;
+      cell.addEventListener('click', () => {
+        calSelectedDate = dateStr;
+        renderCalendar();
+        renderCalEvents();
+        document.getElementById('cal-selected-date-label').textContent = `${calYear}년 ${calMonth+1}월 ${d}일`;
+      });
+      grid.appendChild(cell);
+    }
+  }
+
+  function renderCalEvents() {
+    const list = document.getElementById('cal-events-list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!calSelectedDate || !calEvents[calSelectedDate] || calEvents[calSelectedDate].length === 0) {
+      list.innerHTML = '<div class="cal-no-events">일정 없음</div>';
+      return;
+    }
+    calEvents[calSelectedDate].forEach((ev, idx) => {
+      const item = document.createElement('div');
+      item.className = 'cal-event-item';
+      item.innerHTML = `<span class="cal-event-dot">●</span><span class="cal-event-text">${escapeHtml(ev)}</span><button class="cal-event-del" data-idx="${idx}" title="삭제">✕</button>`;
+      item.querySelector('.cal-event-del').addEventListener('click', () => {
+        calEvents[calSelectedDate].splice(idx, 1);
+        if (calEvents[calSelectedDate].length === 0) delete calEvents[calSelectedDate];
+        saveCalEvents();
+        renderCalendar();
+        renderCalEvents();
+      });
+      list.appendChild(item);
+    });
+  }
+
+  function saveCalEvents() {
+    try { localStorage.setItem('pulse_cal_events', JSON.stringify(calEvents)); } catch {}
+  }
+
+  // ==========================================================================
+  // ⌨️ 단축키 치트시트 (Ctrl+/)
+  // ==========================================================================
+  const SHORTCUT_DATA = [
+    {
+      category: '🌐 전역',
+      items: [
+        { keys: ['Ctrl', '/'], desc: '단축키 목록 보기' },
+        { keys: ['Ctrl', 'Space'], desc: 'Spotlight 검색 열기' },
+        { keys: ['F3'], desc: '미션 컨트롤' },
+        { keys: ['Ctrl', '↑'], desc: '미션 컨트롤' },
+        { keys: ['F11'], desc: '전체화면 토글' },
+      ]
+    },
+    {
+      category: '☁️ Pulse Cloud',
+      items: [
+        { keys: ['Click'], desc: '파일 선택' },
+        { keys: ['Shift', 'Click'], desc: '범위 다중 선택' },
+      ]
+    },
+    {
+      category: '🖥️ Pulse OS 창 관리',
+      items: [
+        { keys: ['드래그'], desc: '창 이동' },
+        { keys: ['우하단 드래그'], desc: '창 크기 조절' },
+        { keys: ['우클릭'], desc: '컨텍스트 메뉴' },
+        { keys: ['메뉴바로 드래그'], desc: '창 최대화' },
+        { keys: ['좌·우 끝 드래그'], desc: '50% 분할 스냅' },
+      ]
+    },
+    {
+      category: '📁 Finder / Cloud',
+      items: [
+        { keys: ['더블클릭'], desc: '파일 열기 / 폴더 진입' },
+        { keys: ['Space'], desc: 'Quick Look 미리보기' },
+        { keys: ['← →'], desc: 'Quick Look 이전/다음' },
+        { keys: ['Esc'], desc: 'Quick Look 닫기' },
+        { keys: ['Enter'], desc: '선택 항목 열기' },
+      ]
+    },
+    {
+      category: '📝 에디터',
+      items: [
+        { keys: ['Ctrl', 'S'], desc: '파일 저장' },
+      ]
+    },
+    {
+      category: '📸 Pulse Photos',
+      items: [
+        { keys: ['← →'], desc: '라이트박스 이전/다음' },
+        { keys: ['Esc'], desc: '라이트박스 닫기' },
+      ]
+    },
+    {
+      category: '🔍 Spotlight',
+      items: [
+        { keys: ['↑ ↓'], desc: '결과 탐색' },
+        { keys: ['Enter'], desc: '선택 실행' },
+        { keys: ['Esc'], desc: '닫기' },
+      ]
+    },
+  ];
+
+  function openShortcutsModal() {
+    const modal = document.getElementById('shortcuts-modal');
+    if (!modal) return;
+    renderShortcutsModal();
+    modal.classList.remove('hidden');
+    modal.focus();
+  }
+
+  function closeShortcutsModal() {
+    const modal = document.getElementById('shortcuts-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function renderShortcutsModal() {
+    const body = document.getElementById('shortcuts-body');
+    if (!body) return;
+    body.innerHTML = SHORTCUT_DATA.map(section => `
+      <div class="shortcut-category">
+        <div class="shortcut-category-title">${escapeHtml(section.category)}</div>
+        <div class="shortcut-rows">
+          ${section.items.map(item => `
+            <div class="shortcut-row">
+              <div class="shortcut-keys">${item.keys.map(k => `<kbd>${escapeHtml(k)}</kbd>`).join('')}</div>
+              <span class="shortcut-desc">${escapeHtml(item.desc)}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function initShortcutsModal() {
+    const closeBtn = document.getElementById('shortcuts-close-btn');
+    const backdrop = document.getElementById('shortcuts-backdrop');
+    if (closeBtn) closeBtn.addEventListener('click', closeShortcutsModal);
+    if (backdrop) backdrop.addEventListener('click', closeShortcutsModal);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === '/' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        const modal = document.getElementById('shortcuts-modal');
+        if (modal && !modal.classList.contains('hidden')) closeShortcutsModal();
+        else openShortcutsModal();
+      }
+      if (e.key === 'Escape') closeShortcutsModal();
+    });
+  }
+
+  // ==========================================================================
+  // 🔔 알림 센터 헬퍼 (v2.3.0)
+  // ==========================================================================
+  function addNotificationCenterItem(title, body) {
+    try {
+      const items = JSON.parse(localStorage.getItem('pulse_notifications') || '[]');
+      items.unshift({ id: Date.now() + Math.random(), title, body, time: Date.now(), unread: true });
+      localStorage.setItem('pulse_notifications', JSON.stringify(items.slice(0, 50)));
+      if (typeof renderNotificationCenter === 'function') renderNotificationCenter();
+    } catch (_) {}
+  }
+
+  // ==========================================================================
+  // 🔖 즐겨찾기 & 태그 관리 (v2.3.0)
+  // ==========================================================================
+  async function toggleFavorite(path) {
+    if (!path) return;
+    try {
+      const res = await Pulse.post('/api/files/favorite', { path });
+      const target = state.files.find(f => f.path === path);
+      if (target) target.favorite = res.favorite;
+      render();
+      renderFinderFiles();
+      fetchFiles();
+      showToast(res.favorite ? '즐겨찾기에 추가되었습니다 ★' : '즐겨찾기에서 제거되었습니다.');
+    } catch (e) {
+      showToast('즐겨찾기 변경 실패: ' + e.message);
+    }
+  }
+
+  async function toggleFileTag(path, tag) {
+    if (!path || !tag) return;
+    try {
+      const res = await Pulse.post('/api/files/tags', { path, tag, action: 'toggle' });
+      const target = state.files.find(f => f.path === path);
+      if (target) target.tags = res.tags;
+      render();
+      renderFinderFiles();
+      showToast('태그가 변경되었습니다.');
+    } catch (e) {
+      showToast('태그 변경 실패: ' + e.message);
+    }
+  }
+
+  function initTagFilterListeners() {
+    document.querySelectorAll('.sidebar-tag-chips .tag-chip').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const filter = chip.dataset.filter;
+        const wasActive = chip.classList.contains('active');
+        document.querySelectorAll('.sidebar-tag-chips .tag-chip').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+
+        if (wasActive) {
+          state.currentFilter = 'all';
+          const allBtn = document.querySelector('.nav-item[data-filter="all"]');
+          if (allBtn) allBtn.classList.add('active');
+        } else {
+          chip.classList.add('active');
+          state.currentFilter = filter;
+        }
+        state.page = 1;
+        fetchFiles();
+      });
+    });
+  }
+
+  // ==========================================================================
+  // 📋 Clipboard 히스토리 모듈 (v2.3.0)
+  // ==========================================================================
+  const CLIPBOARD_STORAGE_KEY = 'pulse_clipboard_items';
+
+  function loadClipboardHistory() {
+    try {
+      return JSON.parse(localStorage.getItem(CLIPBOARD_STORAGE_KEY) || '[]');
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveClipboardHistory(items) {
+    try {
+      localStorage.setItem(CLIPBOARD_STORAGE_KEY, JSON.stringify(items.slice(0, 100)));
+    } catch (_) {}
+  }
+
+  function addClipboardHistory(text) {
+    if (!text || typeof text !== 'string') return;
+    const cleanText = text.trim();
+    if (!cleanText || cleanText.length < 2) return;
+
+    const items = loadClipboardHistory();
+    const existingIdx = items.findIndex(item => item.text === cleanText);
+    let isPinned = false;
+
+    if (existingIdx !== -1) {
+      isPinned = items[existingIdx].pinned || false;
+      items.splice(existingIdx, 1);
+    }
+
+    items.unshift({
+      id: 'clip_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+      text: cleanText,
+      time: Date.now(),
+      pinned: isPinned
+    });
+
+    saveClipboardHistory(items);
+    if (state.openWindows.clipboard) {
+      renderClipboardHistory();
+    }
+  }
+
+  function togglePinClipboard(id) {
+    const items = loadClipboardHistory();
+    const item = items.find(i => i.id === id);
+    if (item) {
+      item.pinned = !item.pinned;
+      saveClipboardHistory(items);
+      renderClipboardHistory();
+      showToast(item.pinned ? '클립이 고정되었습니다 📌' : '클립 고정이 해제되었습니다.');
+    }
+  }
+
+  function deleteClipboardItem(id) {
+    let items = loadClipboardHistory();
+    items = items.filter(i => i.id !== id);
+    saveClipboardHistory(items);
+    renderClipboardHistory();
+  }
+
+  function clearClipboardHistory() {
+    let items = loadClipboardHistory();
+    // 핀 고정된 항목은 유지, 일반 항목만 삭제
+    const pinned = items.filter(i => i.pinned);
+    saveClipboardHistory(pinned);
+    renderClipboardHistory();
+    showToast('일반 클립보드 기록을 비웠습니다.');
+  }
+
+  function renderClipboardHistory(filterQuery = '') {
+    const pinnedListEl = document.getElementById('clipboard-pinned-list');
+    const recentListEl = document.getElementById('clipboard-recent-list');
+    const pinnedSec = document.getElementById('clipboard-pinned-section');
+    const recentSec = document.getElementById('clipboard-recent-section');
+    const emptyEl = document.getElementById('clipboard-empty');
+    if (!pinnedListEl || !recentListEl) return;
+
+    let items = loadClipboardHistory();
+    const q = (filterQuery || '').toLowerCase().trim();
+    if (q) {
+      items = items.filter(i => i.text.toLowerCase().includes(q));
+    }
+
+    const pinned = items.filter(i => i.pinned);
+    const recent = items.filter(i => !i.pinned);
+
+    if (emptyEl) {
+      emptyEl.classList.toggle('hidden', items.length > 0);
+    }
+    if (pinnedSec) {
+      pinnedSec.classList.toggle('hidden', pinned.length === 0);
+    }
+    if (recentSec) {
+      recentSec.classList.toggle('hidden', recent.length === 0);
+    }
+
+    const makeItemHtml = (item) => `
+      <div class="clipboard-item ${item.pinned ? 'is-pinned' : ''}" data-clip-id="${item.id}">
+        <span class="clipboard-item-text" title="${escapeHtml(item.text)}">${escapeHtml(item.text)}</span>
+        <div class="clipboard-item-actions">
+          <button class="clip-btn clip-btn-pin ${item.pinned ? 'pinned' : ''}" data-action="pin" title="${item.pinned ? '고정 해제' : '핀 고정'}">📌</button>
+          <button class="clip-btn clip-btn-copy" data-action="copy" title="다시 복사">복사</button>
+          <button class="clip-btn clip-btn-del" data-action="delete" title="삭제">✕</button>
+        </div>
+      </div>
+    `;
+
+    pinnedListEl.innerHTML = pinned.map(makeItemHtml).join('');
+    recentListEl.innerHTML = recent.map(makeItemHtml).join('');
+
+    const bindItemEvents = (container) => {
+      container.querySelectorAll('.clipboard-item').forEach(el => {
+        const id = el.dataset.clipId;
+        const item = items.find(i => i.id === id);
+        if (!item) return;
+
+        el.addEventListener('click', async (e) => {
+          const actionBtn = e.target.closest('[data-action]');
+          if (!actionBtn) {
+            await copyToClipboard(item.text);
+            showToast('클립보드에 복사되었습니다! 📋');
+            return;
+          }
+          const act = actionBtn.dataset.action;
+          if (act === 'pin') {
+            togglePinClipboard(id);
+          } else if (act === 'copy') {
+            await copyToClipboard(item.text);
+            showToast('클립보드에 복사되었습니다! 📋');
+          } else if (act === 'delete') {
+            deleteClipboardItem(id);
+          }
+        });
+      });
+    };
+
+    bindItemEvents(pinnedListEl);
+    bindItemEvents(recentListEl);
+  }
+
+  function initClipboardApp() {
+    const searchInp = document.getElementById('clipboard-search-input');
+    const quickAdd = document.getElementById('clipboard-quick-add');
+    const addBtn = document.getElementById('btn-clipboard-add');
+    const clearBtn = document.getElementById('btn-clipboard-clear');
+
+    if (searchInp) {
+      searchInp.addEventListener('input', (e) => {
+        renderClipboardHistory(e.target.value);
+      });
+    }
+
+    const handleAdd = () => {
+      if (!quickAdd) return;
+      const text = quickAdd.value.trim();
+      if (text) {
+        addClipboardHistory(text);
+        quickAdd.value = '';
+        showToast('클립보드에 추가되었습니다.');
+      }
+    };
+
+    if (quickAdd) {
+      quickAdd.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleAdd();
+      });
+    }
+    if (addBtn) addBtn.addEventListener('click', handleAdd);
+    if (clearBtn) clearBtn.addEventListener('click', clearClipboardHistory);
+  }
+
+  // ==========================================================================
+  // 🔗 파일 안전 공유 링크 모달 (v2.3.0)
+  // ==========================================================================
+  let currentShareTarget = null;
+
+  function openShareModal(file) {
+    currentShareTarget = file;
+    const modal = document.getElementById('share-modal');
+    const nameEl = document.getElementById('share-target-name');
+    const metaEl = document.getElementById('share-target-meta');
+    const resBox = document.getElementById('share-result-box');
+    if (!modal) return;
+
+    if (nameEl) nameEl.textContent = file.name;
+    if (metaEl) metaEl.textContent = `${file.sizeFormatted || ''} · ${file.dateFormatted || ''}`;
+    if (resBox) resBox.classList.add('hidden');
+
+    modal.classList.remove('hidden');
+  }
+
+  function closeShareModal() {
+    const modal = document.getElementById('share-modal');
+    if (modal) modal.classList.add('hidden');
+    currentShareTarget = null;
+  }
+
+  function initShareModal() {
+    const closeBtn = document.getElementById('btn-share-close');
+    const backdrop = document.getElementById('share-modal-backdrop');
+    const createBtn = document.getElementById('btn-create-share');
+    const copyBtn = document.getElementById('btn-copy-share-url');
+    const urlInput = document.getElementById('share-url-input');
+
+    if (closeBtn) closeBtn.addEventListener('click', closeShareModal);
+    if (backdrop) backdrop.addEventListener('click', closeShareModal);
+
+    if (createBtn) {
+      createBtn.addEventListener('click', async () => {
+        if (!currentShareTarget) return;
+        const expSelect = document.getElementById('share-expire-select');
+        const maxSelect = document.getElementById('share-maxdl-select');
+        const expireHours = expSelect ? parseInt(expSelect.value, 10) : 24;
+        const maxDownloads = maxSelect ? parseInt(maxSelect.value, 10) : 0;
+
+        try {
+          createBtn.disabled = true;
+          createBtn.textContent = '링크 생성 중...';
+          const res = await Pulse.post('/api/shares', {
+            path: currentShareTarget.path,
+            expireHours,
+            maxDownloads
+          });
+
+          const fullUrl = window.location.origin + res.url;
+          const resBox = document.getElementById('share-result-box');
+          const metaText = document.getElementById('share-result-meta');
+
+          if (urlInput) urlInput.value = fullUrl;
+          if (metaText) {
+            metaText.textContent = `유효 기한: ${res.expires} (최대 다운로드: ${res.maxDownloads ? res.maxDownloads + '회' : '무제한'})`;
+          }
+          if (resBox) resBox.classList.remove('hidden');
+
+          await copyToClipboard(fullUrl);
+          showToast('공유 링크가 생성되어 클립보드에 복사되었습니다! 🔗');
+        } catch (e) {
+          showToast('공유 링크 생성 실패: ' + e.message);
+        } finally {
+          createBtn.disabled = false;
+          createBtn.textContent = '공유 링크 발급하기';
+        }
+      });
+    }
+
+    if (copyBtn && urlInput) {
+      copyBtn.addEventListener('click', async () => {
+        if (urlInput.value) {
+          await copyToClipboard(urlInput.value);
+          showToast('공유 URL이 클립보드에 복사되었습니다! 📋');
+        }
+      });
+    }
+  }
+
+  // ==========================================================================
+  // 🌙 Focus Mode (집중 모드 & 뽀모도로 타이머) (v2.3.0)
+  // ==========================================================================
+  state.focusMode = false;
+  state.focusRemainingSeconds = 0;
+  let focusIntervalTimer = null;
+
+  function playFocusChime() {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.3); // A5
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 1.2);
+    } catch (_) {}
+  }
+
+  function updateFocusTimerDisplay() {
+    const timerEl = document.getElementById('menubar-focus-timer');
+    const ccDesc = document.getElementById('cc-focus-tile-desc');
+    if (!timerEl) return;
+
+    if (!state.focusMode) {
+      timerEl.classList.add('hidden');
+      if (ccDesc) ccDesc.textContent = '꺼짐';
+      return;
+    }
+
+    timerEl.classList.remove('hidden');
+    const m = Math.floor(state.focusRemainingSeconds / 60);
+    const s = state.focusRemainingSeconds % 60;
+    const timeStr = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    timerEl.textContent = timeStr;
+    if (ccDesc) ccDesc.textContent = `${timeStr} 남음`;
+  }
+
+  function toggleFocusMode(forceState = null, durationMinutes = 25) {
+    const nextState = forceState !== null ? forceState : !state.focusMode;
+    state.focusMode = nextState;
+
+    const body = document.body;
+    const btn = document.getElementById('btn-desktop-focus');
+    const ccTile = document.getElementById('btn-cc-focus-toggle');
+
+    if (state.focusMode) {
+      body.classList.add('focus-mode-active');
+      if (btn) btn.classList.add('active');
+      if (ccTile) ccTile.classList.add('active');
+      state.focusRemainingSeconds = durationMinutes * 60;
+      updateFocusTimerDisplay();
+
+      if (focusIntervalTimer) clearInterval(focusIntervalTimer);
+      focusIntervalTimer = setInterval(() => {
+        state.focusRemainingSeconds--;
+        if (state.focusRemainingSeconds <= 0) {
+          clearInterval(focusIntervalTimer);
+          focusIntervalTimer = null;
+          toggleFocusMode(false);
+          playFocusChime();
+          showToast('🎉 뽀모도로 집중 시간이 완료되었습니다! 잠시 휴식을 취하세요.');
+          addNotificationCenterItem('집중 모드 완료', '25분 집중 세션이 종료되었습니다. 가벼운 스트레칭을 추천합니다!');
+        } else {
+          updateFocusTimerDisplay();
+        }
+      }, 1000);
+
+      showToast(`🌙 집중 모드가 켜졌습니다 (${durationMinutes}분). 알림 팝업이 차단됩니다.`);
+    } else {
+      body.classList.remove('focus-mode-active');
+      if (btn) btn.classList.remove('active');
+      if (ccTile) ccTile.classList.remove('active');
+      if (focusIntervalTimer) {
+        clearInterval(focusIntervalTimer);
+        focusIntervalTimer = null;
+      }
+      state.focusRemainingSeconds = 0;
+      updateFocusTimerDisplay();
+      showToast('☀️ 집중 모드가 꺼졌습니다.');
+    }
+  }
+
+  function initFocusMode() {
+    const btn = document.getElementById('btn-desktop-focus');
+    const ccTile = document.getElementById('btn-cc-focus-toggle');
+
+    if (btn) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleFocusMode();
+      });
+    }
+
+    if (ccTile) {
+      ccTile.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleFocusMode();
+      });
+    }
+  }
+
+  // ==========================================================================
+  // 📷 Pulse Cam (스마트폰 원격 홈캠 / CCTV & 스냅샷) (v2.4.0)
+  // ==========================================================================
+
+  let camActive = false;
+  let camPollTimer = null;
+  let camOsdTimer = null;
+  let camBroadcastActive = false;
+  let camBroadcastStream = null;
+  let camBroadcastInterval = null;
+  let camLocalStream = null;
+  let camLens = '0'; // '0': 후면(environment), '1': 전면(user)
+  let camSource = 'phone'; // 'phone' | 'local'
+  let camIsFetchingFrame = false;
+
+  function playCameraShutterSound() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+
+      // First mechanical click
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(800, ctx.currentTime);
+      osc1.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.07);
+      gain1.gain.setValueAtTime(0.35, ctx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.07);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(ctx.currentTime);
+      osc1.stop(ctx.currentTime + 0.08);
+
+      // Second shutter click
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1100, ctx.currentTime + 0.08);
+      osc2.frequency.exponentialRampToValueAtTime(180, ctx.currentTime + 0.15);
+      gain2.gain.setValueAtTime(0.28, ctx.currentTime + 0.08);
+      gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(ctx.currentTime + 0.08);
+      osc2.stop(ctx.currentTime + 0.16);
+    } catch (_) {}
+  }
+
+  function startCameraOsd() {
+    if (camOsdTimer) clearInterval(camOsdTimer);
+    const updateTime = () => {
+      const elTime = document.getElementById('cam-osd-time');
+      if (!elTime) return;
+      const now = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      elTime.textContent = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    };
+    updateTime();
+    camOsdTimer = setInterval(updateTime, 1000);
+  }
+
+  function stopCameraOsd() {
+    if (camOsdTimer) {
+      clearInterval(camOsdTimer);
+      camOsdTimer = null;
+    }
+  }
+
+  async function checkCameraStatus() {
+    try {
+      const res = await fetch('/api/camera/status');
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function fetchRemoteCamFrame() {
+    if (!camActive || camSource !== 'phone' || camIsFetchingFrame) return;
+    camIsFetchingFrame = true;
+    try {
+      const img = document.getElementById('cam-remote-img');
+      const placeholder = document.getElementById('cam-placeholder');
+      const liveBadge = document.getElementById('cam-live-badge');
+      const osdBadge = document.getElementById('cam-osd-badge');
+
+      const status = await checkCameraStatus();
+      if (!camActive || camSource !== 'phone') {
+        camIsFetchingFrame = false;
+        return;
+      }
+
+      if (status && (status.live_feed || status.termux_camera)) {
+        if (placeholder) placeholder.classList.add('hidden');
+        if (img) img.classList.remove('hidden');
+        if (liveBadge) liveBadge.classList.remove('hidden');
+
+        if (osdBadge) {
+          osdBadge.textContent = status.live_feed ? 'CCTV · LIVE' : 'CCTV · TERMUX-API';
+        }
+
+        if (img) {
+          const newImg = new Image();
+          newImg.onload = () => {
+            img.src = newImg.src;
+            camIsFetchingFrame = false;
+          };
+          newImg.onerror = () => {
+            camIsFetchingFrame = false;
+          };
+          newImg.src = `/api/camera/frame?t=${Date.now()}`;
+          return;
+        }
+      } else {
+        if (placeholder) {
+          placeholder.classList.remove('hidden');
+          const pTitle = document.getElementById('cam-placeholder-title');
+          const pSub = document.getElementById('cam-placeholder-sub');
+          if (pTitle) pTitle.textContent = '홈캠 신호 대기 중';
+          if (pSub) pSub.innerHTML = '스마트폰 브라우저에서 아래 "내 기기 카메라 송출하기"를 켜거나<br>Termux:API로 원격 카메라를 연동하세요.';
+        }
+        if (img) {
+          img.classList.add('hidden');
+          img.src = '';
+        }
+        if (liveBadge) liveBadge.classList.add('hidden');
+        if (osdBadge) osdBadge.textContent = 'CCTV · OFFLINE';
+      }
+    } catch (_) {}
+    camIsFetchingFrame = false;
+  }
+
+  async function startLocalCamStream() {
+    stopLocalCamStream();
+    const video = document.getElementById('cam-local-video');
+    const remoteImg = document.getElementById('cam-remote-img');
+    const placeholder = document.getElementById('cam-placeholder');
+    const liveBadge = document.getElementById('cam-live-badge');
+    const osdBadge = document.getElementById('cam-osd-badge');
+
+    if (remoteImg) { remoteImg.classList.add('hidden'); remoteImg.src = ''; }
+
+    try {
+      const facing = camLens === '1' ? 'user' : 'environment';
+      camLocalStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+      });
+      if (video) {
+        video.srcObject = camLocalStream;
+        video.classList.remove('hidden');
+      }
+      if (placeholder) placeholder.classList.add('hidden');
+      if (liveBadge) liveBadge.classList.remove('hidden');
+      if (osdBadge) osdBadge.textContent = 'LOCAL · WEBCAM';
+    } catch (err) {
+      if (video) video.classList.add('hidden');
+      if (placeholder) {
+        placeholder.classList.remove('hidden');
+        const pTitle = document.getElementById('cam-placeholder-title');
+        const pSub = document.getElementById('cam-placeholder-sub');
+        if (pTitle) pTitle.textContent = '웹캠 접근 실패';
+        if (pSub) pSub.textContent = '카메라 권한이 거부되었거나 연결된 웹캠이 없습니다: ' + (err.message || err);
+      }
+      if (liveBadge) liveBadge.classList.add('hidden');
+      if (osdBadge) osdBadge.textContent = 'LOCAL · ERROR';
+    }
+  }
+
+  function stopLocalCamStream() {
+    if (camLocalStream) {
+      camLocalStream.getTracks().forEach(t => t.stop());
+      camLocalStream = null;
+    }
+    const video = document.getElementById('cam-local-video');
+    if (video) {
+      video.srcObject = null;
+      video.classList.add('hidden');
+    }
+  }
+
+  function startPulseCam() {
+    camActive = true;
+    startCameraOsd();
+
+    const video = document.getElementById('cam-local-video');
+    const remoteImg = document.getElementById('cam-remote-img');
+
+    if (camSource === 'local') {
+      startLocalCamStream();
+    } else {
+      stopLocalCamStream();
+      if (remoteImg) remoteImg.classList.remove('hidden');
+      if (video) video.classList.add('hidden');
+      fetchRemoteCamFrame();
+      if (camPollTimer) clearInterval(camPollTimer);
+      camPollTimer = setInterval(fetchRemoteCamFrame, 350);
+    }
+  }
+
+  function stopPulseCam() {
+    camActive = false;
+    stopCameraOsd();
+    if (camPollTimer) {
+      clearInterval(camPollTimer);
+      camPollTimer = null;
+    }
+    stopLocalCamStream();
+
+    const liveBadge = document.getElementById('cam-live-badge');
+    if (liveBadge) liveBadge.classList.add('hidden');
+  }
+
+  async function toggleCamBroadcast() {
+    const btn = document.getElementById('btn-cam-broadcast-toggle');
+    const icon = document.getElementById('cam-broadcast-icon');
+    const label = document.getElementById('cam-broadcast-label');
+
+    if (camBroadcastActive) {
+      if (camBroadcastInterval) {
+        clearInterval(camBroadcastInterval);
+        camBroadcastInterval = null;
+      }
+      if (camBroadcastStream) {
+        camBroadcastStream.getTracks().forEach(t => t.stop());
+        camBroadcastStream = null;
+      }
+      camBroadcastActive = false;
+      if (btn) btn.classList.remove('broadcasting');
+      if (icon) icon.textContent = '📱';
+      if (label) label.textContent = '내 기기 카메라 송출하기';
+      showToast('카메라 송출이 중지되었습니다.');
+      return;
+    }
+
+    try {
+      const facing = camLens === '1' ? 'user' : 'environment';
+      camBroadcastStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing, width: { ideal: 960 }, height: { ideal: 540 } },
+        audio: false
+      });
+
+      const offscreenVideo = document.createElement('video');
+      offscreenVideo.autoplay = true;
+      offscreenVideo.playsInline = true;
+      offscreenVideo.muted = true;
+      offscreenVideo.srcObject = camBroadcastStream;
+      await offscreenVideo.play();
+
+      const offscreenCanvas = document.createElement('canvas');
+      const offscreenCtx = offscreenCanvas.getContext('2d');
+
+      let isSendingFrame = false;
+      const sendFrame = async () => {
+        if (!camBroadcastActive || isSendingFrame) return;
+        if (!offscreenVideo.videoWidth || !offscreenVideo.videoHeight) return;
+        isSendingFrame = true;
+        try {
+          offscreenCanvas.width = offscreenVideo.videoWidth;
+          offscreenCanvas.height = offscreenVideo.videoHeight;
+          offscreenCtx.drawImage(offscreenVideo, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
+          const dataUrl = offscreenCanvas.toDataURL('image/jpeg', 0.55);
+          await fetch('/api/camera/feed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: dataUrl, camera: camLens })
+          });
+        } catch (_) {}
+        isSendingFrame = false;
+      };
+
+      camBroadcastActive = true;
+      if (btn) btn.classList.add('broadcasting');
+      if (icon) icon.textContent = '🔴';
+      if (label) label.textContent = '송출 중 (클릭하여 중지)';
+      showToast('📡 카메라 송출을 시작했습니다! 실시간 화면이 공유됩니다.');
+
+      camBroadcastInterval = setInterval(sendFrame, 200);
+
+      if (camActive && camSource === 'phone') {
+        fetchRemoteCamFrame();
+      }
+    } catch (err) {
+      showToast('카메라 권한을 얻을 수 없습니다: ' + (err.message || err));
+      if (btn) btn.classList.remove('broadcasting');
+      if (icon) icon.textContent = '📱';
+      if (label) label.textContent = '내 기기 카메라 송출하기';
+      camBroadcastActive = false;
+    }
+  }
+
+  async function takePulseCamSnapshot() {
+    playCameraShutterSound();
+    const flash = document.getElementById('cam-shutter-flash');
+    if (flash) {
+      flash.classList.add('flashing');
+      setTimeout(() => flash.classList.remove('flashing'), 180);
+    }
+
+    const captureBtn = document.getElementById('btn-cam-capture');
+    if (captureBtn) captureBtn.disabled = true;
+
+    try {
+      let payloadImage = null;
+
+      if (camSource === 'local' && camLocalStream) {
+        const video = document.getElementById('cam-local-video');
+        if (video && video.videoWidth > 0) {
+          const canvas = document.getElementById('cam-canvas') || document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          payloadImage = canvas.toDataURL('image/jpeg', 0.88);
+        }
+      } else if (camBroadcastActive && camBroadcastStream) {
+        const canvas = document.getElementById('cam-canvas') || document.createElement('canvas');
+        const video = document.getElementById('cam-local-video');
+        if (video && video.videoWidth > 0) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          payloadImage = canvas.toDataURL('image/jpeg', 0.88);
+        }
+      }
+
+      const postBody = { camera: camLens };
+      if (payloadImage) postBody.image = payloadImage;
+
+      const res = await fetch('/api/camera/snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(postBody)
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.description || data.message || '스냅샷 저장에 실패했습니다.');
+      }
+
+      showToast(`📸 스냅샷 저장 완료: ${data.filename}`);
+      if (typeof addNotificationCenterItem === 'function') {
+        addNotificationCenterItem('📷 Pulse Cam 스냅샷', `Camera/${data.filename} 에 저장되었습니다.`);
+      }
+
+      if (state.folder === 'Camera') {
+        fetchFiles();
+      }
+      if (state.openWindows.photos && typeof loadPhotos === 'function') {
+        loadPhotos();
+      }
+    } catch (err) {
+      showToast('⚠️ 스냅샷 실패: ' + (err.message || err));
+    } finally {
+      if (captureBtn) captureBtn.disabled = false;
+    }
+  }
+
+  function initPulseCam() {
+    const sourceSelect = document.getElementById('cam-source-select');
+    const lensSelect = document.getElementById('cam-lens-select');
+    const btnRefresh = document.getElementById('btn-cam-refresh');
+    const btnGrid = document.getElementById('btn-cam-grid-toggle');
+    const btnFolder = document.getElementById('btn-cam-folder');
+    const btnBroadcast = document.getElementById('btn-cam-broadcast-toggle');
+    const btnCapture = document.getElementById('btn-cam-capture');
+    const osdGrid = document.getElementById('cam-osd-grid');
+
+    if (sourceSelect) {
+      sourceSelect.addEventListener('change', (e) => {
+        camSource = e.target.value;
+        if (camActive) {
+          startPulseCam();
+        }
+      });
+    }
+
+    if (lensSelect) {
+      lensSelect.addEventListener('change', (e) => {
+        camLens = e.target.value;
+        if (camSource === 'local' && camActive) {
+          startLocalCamStream();
+        }
+      });
+    }
+
+    if (btnRefresh) {
+      btnRefresh.addEventListener('click', () => {
+        if (camSource === 'phone') {
+          fetchRemoteCamFrame();
+          showToast('카메라 피드를 갱신했습니다.');
+        } else {
+          startLocalCamStream();
+        }
+      });
+    }
+
+    if (btnGrid && osdGrid) {
+      btnGrid.addEventListener('click', () => {
+        osdGrid.classList.toggle('show-grid');
+        btnGrid.classList.toggle('active');
+      });
+    }
+
+    if (btnFolder) {
+      btnFolder.addEventListener('click', () => {
+        openDesktopWindow('finder');
+        navigateFolder('Camera');
+        showToast('Camera 보관함으로 이동했습니다.');
+      });
+    }
+
+    if (btnBroadcast) {
+      btnBroadcast.addEventListener('click', toggleCamBroadcast);
+    }
+
+    if (btnCapture) {
+      btnCapture.addEventListener('click', takePulseCamSnapshot);
+    }
+  }
+
   // Start app
   document.addEventListener('DOMContentLoaded', init);
 })();
+
