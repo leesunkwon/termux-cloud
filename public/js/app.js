@@ -4483,6 +4483,18 @@
       if (batVal && state.dashboardData.battery) batVal.textContent = state.dashboardData.battery.percentage !== null ? `${state.dashboardData.battery.percentage}%` : '연결됨';
       if (cpuVal && state.dashboardData.cpu) cpuVal.textContent = state.dashboardData.cpu.usage !== undefined ? `${state.dashboardData.cpu.usage}%` : `${state.dashboardData.cpu.cores || 4}코어`;
       if (memVal && state.dashboardData.memory) memVal.textContent = state.dashboardData.memory.usedFormatted || '정상';
+
+      const tunnelTile = document.getElementById('cc-tile-tunnel');
+      const tunnelVal = document.getElementById('cc-tunnel-val');
+      const tunnel = state.dashboardData.network?.tunnel;
+      if (tunnelTile && tunnelVal) {
+        if (tunnel && tunnel.active && tunnel.url) {
+          tunnelTile.classList.remove('hidden');
+          tunnelVal.textContent = tunnel.url;
+        } else {
+          tunnelTile.classList.add('hidden');
+        }
+      }
     }
 
     const themeMode = document.getElementById('cc-theme-mode');
@@ -4515,6 +4527,17 @@
         const ip = document.getElementById('cc-ip-val')?.textContent || '';
         if (ip && await copyToClipboard(ip)) {
           showToast(`IP 주소(${ip})가 클립보드에 복사되었습니다.`);
+        }
+      });
+    }
+
+    const copyTunnelBtn = document.getElementById('btn-cc-copy-tunnel');
+    if (copyTunnelBtn) {
+      copyTunnelBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const url = document.getElementById('cc-tunnel-val')?.textContent || '';
+        if (url && await copyToClipboard(url)) {
+          showToast(`외부 접속 주소가 복사되었습니다:\n${url}`);
         }
       });
     }

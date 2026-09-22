@@ -5502,6 +5502,14 @@ button:disabled {
 .cc-tile:hover {
   background: rgba(255, 255, 255, 0.14);
 }
+.cc-tile-tunnel {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(243, 128, 32, 0.3);
+  background: rgba(243, 128, 32, 0.08);
+}
+.cc-tile-tunnel:hover {
+  background: rgba(243, 128, 32, 0.15);
+}
 .cc-tile-icon {
   font-size: 16px;
   color: #0071e3;

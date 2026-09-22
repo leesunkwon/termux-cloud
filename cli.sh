@@ -16,6 +16,7 @@ Pulse 전역 명령어
   termux-cloud stop            서버와 리로더 종료
   termux-cloud restart [옵션]  재시작 (기본 백그라운드)
   termux-cloud status          서버 상태·주소·최근 로그
+  termux-cloud tunnel [옵션]   Cloudflare Tunnel 외부 접속 (start, stop, status)
   termux-cloud logs            최근 로그 50줄
   termux-cloud logs -f         로그 실시간 보기 (Ctrl+C로 보기 종료)
   termux-cloud update [옵션]   Git 업데이트 후 재시작 (기본 백그라운드)
@@ -62,9 +63,12 @@ case "$ACTION" in
         ensure_account
         exec bash "$SCRIPT_DIR/start.sh" "$@"
         ;;
-    --bg|-d|background|--open|-o|--port|-p)
+    --bg|-d|background|--open|-o|--port|-p|--tunnel)
         ensure_account
         exec bash "$SCRIPT_DIR/start.sh" "$ACTION" "$@"
+        ;;
+    tunnel)
+        exec bash "$SCRIPT_DIR/tunnel.sh" "$@"
         ;;
     stop|status)
         exec bash "$SCRIPT_DIR/$ACTION.sh" "$@"

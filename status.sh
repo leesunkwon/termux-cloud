@@ -51,6 +51,19 @@ if [ "$RUNNING" = true ]; then
     echo -e " 스마트폰 주소: ${CYAN}http://localhost:${PORT}${NC}"
     echo -e " 와이파이 주소: ${CYAN}http://${LOCAL_IP}:${PORT}${NC}"
     
+    # Cloudflare Tunnel 외부 주소 확인
+    if [ -f "$SCRIPT_DIR/.tunnel.pid" ]; then
+        TUNNEL_PID=$(cat "$SCRIPT_DIR/.tunnel.pid" 2>/dev/null || true)
+        if [ -n "$TUNNEL_PID" ] && kill -0 "$TUNNEL_PID" 2>/dev/null; then
+            TUNNEL_URL=$(cat "$SCRIPT_DIR/.tunnel.url" 2>/dev/null || true)
+            if [ -n "$TUNNEL_URL" ]; then
+                echo -e " 외부(인터넷): ${GREEN}${BOLD}${TUNNEL_URL}${NC} ${CYAN}(Cloudflare Tunnel)${NC}"
+            else
+                echo -e " 외부(인터넷): ${YELLOW}Cloudflare Tunnel 주소 발급 대기 중... (PID: ${TUNNEL_PID})${NC}"
+            fi
+        fi
+    fi
+    
     # 프로세스 상세 정보 (메모리, CPU)
     if command -v ps &>/dev/null; then
         echo -e "\n${BOLD}[프로세스 자원 사용 현황]${NC}"

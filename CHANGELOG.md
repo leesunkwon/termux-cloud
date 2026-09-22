@@ -2,6 +2,30 @@
 
 Pulse (Pulse Cloud & Pulse OS) 공식 버전별 변경 이력입니다.
 
+## [v2.5.0] - 2026-09-22
+### 🚀 Cloudflare Tunnel 원클릭 외부 접속 & 반응형 모바일 UI 개편
+
+#### 1. ☁️ Cloudflare Tunnel 원클릭 외부 접속 통합 (`tunnel.sh` & CLI)
+- **어디서든 브라우저 접속**: 스마트폰 LTE/5G 모바일 데이터 환경(통신사 CGNAT)에서도 공유기 포트포워딩 없이 전 세계 어디서든 브라우저로 Pulse Cloud에 접속 가능.
+- **전역 CLI 지원**:
+  - `termux-cloud tunnel start [--bg]`: 무료 Quick Tunnel (`*.trycloudflare.com`) 즉시 자동 생성.
+  - `termux-cloud --bg --tunnel`: Pulse 서버와 Cloudflare Tunnel 동시 백그라운드 구동.
+  - `termux-cloud tunnel status` / `stop`: 터널 상태 확인 및 프로세스 안전 종료.
+  - `termux-cloud stop` 시 연계된 터널 프로세스 자동 종료 지원.
+- **고정 도메인 지원**: 개인 도메인이 있는 경우 `CLOUDFLARE_TUNNEL_TOKEN` 환경변수 또는 `--token` 옵션으로 영구 고정 도메인 연결 지원.
+- **상태 모니터링 연동**:
+  - `termux-cloud status`: 외부 인터넷 HTTPS 접속 주소 명확히 출력.
+  - Pulse OS 제어 센터(Control Center): 외부 접속 배지 표시 및 1클릭 복사 버튼 탑재.
+  - 시스템 대시보드 (`/api/system/dashboard`, `/api/system/tunnel`): 외부 터널 활성화 상태 및 접속 주소 실시간 제공.
+
+#### 2. 📱 모바일 환경 반응형 터치 UI 전면 최적화
+- **상단 내비게이션 바**: 좁은 모바일 화면에서 메인 4대 탭을 아이콘 전용 모드로 간소화하고 로고 텍스트/상태 칩을 숨겨 360px 기기에서도 1줄 정렬 완성.
+- **파일 액션 툴바 단일 행 수평 스크롤**: 기존 버튼 줄바꿈 현상을 해결하고 iOS 파일 앱 스타일의 단일 행 관성 수평 스크롤(`overflow-x: auto`) 적용.
+- **Pulse OS 데스크톱 & 플로팅 Dock**: 메뉴바 불필요 버튼 숨김 및 집중 모드 타이머 축소, 15개 앱 Dock의 부드러운 가로 스와이프 탐색 지원.
+- **가상 윈도우 모바일 풀스크린 리셋**: 고정 min-width를 0으로 리셋하고 신호등 최대화 버튼 숨김 처리로 화면 짤림 방지.
+
+---
+
 ## [v2.4.0] - 2026-09-22
 ### 🚀 Pulse Cam (스마트폰 원격 홈캠 / CCTV & 스냅샷)
 

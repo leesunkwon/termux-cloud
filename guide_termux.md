@@ -115,16 +115,26 @@ termux-cloud update   # GitHub 최신 코드로 자동 업데이트 및 재시�
 
 ## 🌍 7단계 (선택): 집 밖(LTE / 외부)에서도 접속하는 법
 
-공유기 포트포워딩 설정이 어렵거나 외부 어디서든 보안 접속을 하고 싶다면 아래 두 가지 방법 중 하나를 추천합니다:
+스마트폰의 LTE/5G 모바일 데이터 환경이나 외부 인터넷 망에서는 통신사 사설망(CGNAT)으로 인해 외부에서 직접 접속할 수 없습니다.  
+Pulse에 내장된 **Cloudflare Tunnel** 또는 **Tailscale**을 사용하면 어디서든 즉시 접속할 수 있습니다:
 
-### 1) Cloudflare Tunnel (가장 추천: 무료 HTTPS + 나만의 도메인)
-공유기 포트를 열 필요 없이 전 세계 어디서나 안전한 HTTPS 암호화 접속이 가능합니다.
+### 1) Cloudflare Tunnel (가장 추천: 전 세계 어디서든 브라우저로 무료 접속)
+접속하는 기기에 아무런 앱을 설치할 필요 없이, 브라우저 링크 하나로 전 세계 어디서든 무료 HTTPS로 접속할 수 있습니다.
+
 ```bash
+# 1. 패키지 설치 (Termux 최초 1회만)
 pkg install cloudflared -y
-cloudflared tunnel --url http://localhost:3000
+
+# 2. 서버와 외부 터널 동시 백그라운드 시작
+termux-cloud --bg --tunnel
+
+# 3. 외부 접속 주소 확인
+termux-cloud status
 ```
-- 터미널에 생성되는 `https://xxxxxx.trycloudflare.com` 주소로 접속하면 외부에서도 무료로 접속 가능합니다.
+- 출력되는 `외부(인터넷): https://xxxxxx.trycloudflare.com (Cloudflare Tunnel)` 주소로 어디서든 브라우저로 접속하세요!
+- 터널만 따로 켜고 끄기: `termux-cloud tunnel start --bg` / `termux-cloud tunnel stop`
+- 서버 종료 시 (`termux-cloud stop`) 터널도 자동으로 함께 안전하게 종료됩니다.
 
 ### 2) Tailscale (개인 기기 간 안전한 가상 사설망)
 1. 구글 플레이스토어에서 갤럭시 폰과 접속할 노트북/폰에 **Tailscale** 앱 설치
-2. 동일 계정으로 로그인 후 갤럭시 폰의 Tailscale IP(예: `100.x.x.x:3000`)로 접속
+2. 동일 구글 계정으로 로그인 후 갤럭시 폰의 Tailscale 고정 IP(예: `http://100.x.x.x:3000`)로 접속

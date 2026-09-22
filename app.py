@@ -17,7 +17,7 @@ from pulse_metrics import Metrics
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
-APP_VERSION = 'v2.4.0'
+APP_VERSION = 'v2.5.0'
 INSTANCE_ID = uuid.uuid4().hex
 SERVER_START_TIME = datetime.now()
 METRICS = Metrics()
@@ -522,6 +522,28 @@ def health():
     return jsonify(success=True, version=APP_VERSION, instanceId=INSTANCE_ID,
                    restartPending=RESTART_PENDING.is_set(), restartError=RESTART_ERROR)
 
+def get_tunnel_info():
+    pid_file = os.path.join(BASE_DIR, '.tunnel.pid')
+    url_file = os.path.join(BASE_DIR, '.tunnel.url')
+    if os.path.isfile(pid_file):
+        try:
+            with open(pid_file, 'r', encoding='utf-8') as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 0)
+            url = ''
+            if os.path.isfile(url_file):
+                with open(url_file, 'r', encoding='utf-8') as f:
+                    url = f.read().strip()
+            return {
+                'active': True,
+                'pid': pid,
+                'url': url,
+                'provider': 'cloudflare'
+            }
+        except (OSError, ValueError):
+            pass
+    return {'active': False, 'url': '', 'provider': ''}
+
 def get_local_ip():
     import socket
     try:
@@ -668,11 +690,20 @@ def get_dashboard_data():
             'network': {
                 'localIp': get_local_ip(),
                 'port': port,
-                'isTermux': is_termux
+                'isTermux': is_termux,
+                'tunnel': get_tunnel_info()
             }
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+# Cloudflare Tunnel 상태 조회 API
+@app.route('/api/system/tunnel', methods=['GET'])
+def get_tunnel_status():
+    return jsonify({
+        'success': True,
+        'tunnel': get_tunnel_info()
+    })
 
 # 릴리즈 로그 및 커밋 변경 내역 API
 @app.route('/api/system/changelog', methods=['GET'])

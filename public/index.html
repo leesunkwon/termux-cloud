@@ -1831,6 +1831,18 @@
             <button class="cc-copy-btn" id="btn-cc-copy-ip" title="IP 주소 복사">복사</button>
           </div>
 
+          <!-- 외부 접속 터널 카드 (Cloudflare) -->
+          <div class="cc-tile cc-tile-tunnel hidden" id="cc-tile-tunnel">
+            <div class="cc-tile-icon" style="color: #f38020;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+            </div>
+            <div class="cc-tile-text">
+              <div class="cc-tile-label">외부 접속 (Cloudflare)</div>
+              <div class="cc-tile-sub cc-tunnel-url" id="cc-tunnel-val">연결 중...</div>
+            </div>
+            <button class="cc-copy-btn" id="btn-cc-copy-tunnel" title="외부 접속 주소 복사">복사</button>
+          </div>
+
           <!-- 테마 토글 카드 -->
           <div class="cc-tile cc-tile-theme" id="btn-cc-theme-toggle">
             <div class="cc-tile-icon" id="cc-theme-icon">🌙</div>

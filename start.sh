@@ -19,6 +19,7 @@ NC='\033[0m' # No Color
 # 파라미터 처리
 BACKGROUND=false
 AUTO_OPEN=false
+WITH_TUNNEL=false
 PORT=${PORT:-3000}
 
 while [[ "$#" -gt 0 ]]; do
@@ -28,6 +29,9 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --open|-o)
             AUTO_OPEN=true
+            ;;
+        --tunnel)
+            WITH_TUNNEL=true
             ;;
         --port|-p)
             PORT="$2"
@@ -159,6 +163,10 @@ if [ "$BACKGROUND" = true ]; then
         echo -e "    - 로그 확인 : ${CYAN}tail -f server.log${NC}"
         echo -e "    - 상태 확인 : ${CYAN}./status.sh${NC}"
         echo -e "    - 서버 중지 : ${CYAN}./stop.sh${NC}"
+        if [ "$WITH_TUNNEL" = true ]; then
+            echo ""
+            bash "$SCRIPT_DIR/tunnel.sh" start --bg --port "$PORT"
+        fi
     else
         echo -e "${RED}[!] 서버 시작 실패. server.log를 확인해주세요:${NC}"
         cat "$SCRIPT_DIR/server.log"
@@ -170,12 +178,17 @@ else
     echo -e "${YELLOW}[*] 터미널을 닫지 마세요. 종료하려면 Ctrl+C를 누르세요.${NC}"
     echo -e "${YELLOW}    (백그라운드에서 실행하려면: ./start.sh --bg)${NC}\n"
     
+    if [ "$WITH_TUNNEL" = true ]; then
+        bash "$SCRIPT_DIR/tunnel.sh" start --bg --port "$PORT"
+        echo ""
+    fi
+
     # PID 저장 및 트랩 설정
     "${SERVER_CMD[@]}" &
     SERVER_PID=$!
     echo "$SERVER_PID" > "$PID_FILE"
     
-    trap "kill $SERVER_PID 2>/dev/null; rm -f '$PID_FILE'; echo -e '\n${YELLOW}[✓] 서버가 종료되었습니다.${NC}'; exit 0" INT TERM
+    trap "kill $SERVER_PID 2>/dev/null; rm -f '$PID_FILE'; [ '$WITH_TUNNEL' = true ] && bash '$SCRIPT_DIR/tunnel.sh' stop 2>/dev/null; echo -e '\n${YELLOW}[✓] 서버가 종료되었습니다.${NC}'; exit 0" INT TERM
     wait $SERVER_PID
     rm -f "$PID_FILE"
 fi

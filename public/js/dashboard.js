@@ -159,10 +159,14 @@ window.PulseDashboard = (() => {
       ['종류별 파일', Object.entries(data.disk.fileCounts || {}).filter(([key]) => key !== 'total').map(([key, count]) => `${({image:'사진',video:'영상',audio:'음악',document:'문서',other:'기타'})[key] || key} ${count}`).join(' · ')],
       ['휴지통 사용량', `${diag.trashPartial ? '최소 ' : ''}${bytes(diag.trashBytes)}`], ['서버 로그 크기', bytes(diag.logBytes)]
     ], `휴지통·로그 통계: ${localTime(diag.collectedAt)} (최대 60초 캐시). 휴지통은 최대 5,000개 항목까지 조사하며 부분 수집 시 ‘최소’로 표시합니다.`);
-    const net = card('네트워크 트래픽', [
+    const netItems = [
       ['브라우저 → 서버 응답 왕복', number(latency, 'ms')], ['기기 IP / 서비스 포트', `${data.network.localIp}:${data.network.port}`],
       ['현재 접속 주소', location.origin]
-    ], diag.networkDetails.reason || '기기 인터페이스 전체 통계이며 Pulse 전용 트래픽이 아닙니다. VPN과 물리 인터페이스의 트래픽은 중복될 수 있습니다.');
+    ];
+    if (data.network && data.network.tunnel && data.network.tunnel.active && data.network.tunnel.url) {
+      netItems.push(['외부 터널 (Cloudflare)', data.network.tunnel.url]);
+    }
+    const net = card('네트워크 트래픽', netItems, diag.networkDetails.reason || '기기 인터페이스 전체 통계이며 Pulse 전용 트래픽이 아닙니다. VPN과 물리 인터페이스의 트래픽은 중복될 수 있습니다.');
     for (const iface of diag.networkDetails.interfaces) {
       net.appendChild(node('p', `${iface.name} · 수신 ${bytes(iface.rxPerSecond)}/s · 송신 ${bytes(iface.txPerSecond)}/s\n누적 수신 ${bytes(iface.rx)} / 송신 ${bytes(iface.tx)}\n오류 RX/TX ${iface.rxErrors}/${iface.txErrors} · 드롭 ${iface.rxDropped}/${iface.txDropped}`, 'diagnostic-interface'));
     }
