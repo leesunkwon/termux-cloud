@@ -110,11 +110,11 @@ start_tunnel() {
 
     if [ -n "$token" ]; then
         echo -e "${GREEN}[*] 등록된 고정 도메인 토큰으로 터널을 실행합니다...${NC}"
-        CMD=(cloudflared tunnel run --token "$token")
+        CMD=(cloudflared tunnel --protocol http2 run --token "$token")
     else
         echo -e "${GREEN}[*] 무료 Quick Tunnel(trycloudflare.com)을 생성합니다...${NC}"
         echo -e "    로컬 대상 포트: ${BOLD}http://127.0.0.1:${custom_port}${NC}"
-        CMD=(cloudflared tunnel --url "http://127.0.0.1:${custom_port}" --no-autoupdate)
+        CMD=(cloudflared tunnel --protocol http2 --url "http://127.0.0.1:${custom_port}" --no-autoupdate)
     fi
 
     if [ "$bg" = true ]; then
