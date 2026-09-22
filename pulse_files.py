@@ -171,6 +171,12 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
         folder = path_for(request.args.get('path', ''), True)
         if not folder.is_dir():
             abort(404, description='업로드 폴더가 없습니다.')
+        try:
+            total, used, free = shutil.disk_usage(root)
+            if free < 5 * 1024 * 1024:
+                abort(507, description='스마트폰 저장 공간이 부족합니다 (남은 공간 5MB 미만).')
+        except OSError:
+            pass
         uploads = request.files.getlist('files')
         if not uploads or len(uploads) > 100:
             abort(400, description='1~100개의 파일을 선택하세요.')

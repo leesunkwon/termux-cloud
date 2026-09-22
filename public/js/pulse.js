@@ -128,5 +128,5 @@ window.Pulse = (() => {
     } catch (error) { showLogin('서버 연결 실패. 새로고침하여 다시 시도하세요.'); }
   }
   document.addEventListener('DOMContentLoaded', initialize);
-  return { ready, api, post, ask, icon, viewport, get csrf() { return csrf; }, get isAdmin() { return role === 'admin'; } };
+  return { ready, api, post, ask, icon, viewport, showLogin, get csrf() { return csrf; }, get isAdmin() { return role === 'admin'; } };
 })();

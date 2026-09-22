@@ -1856,8 +1856,28 @@
           pushNotification('업로드 완료', `${file.name} 파일이 보관함에 저장되었습니다.`);
         } else {
           itemEl.querySelector('.upload-item-pct').textContent = '실패 ✕';
-          showToast('업로드 실패. 로그인과 저장 공간을 확인하세요.', () => { uploadQueue.push({ file, folder }); pumpUploads(); });
           itemEl.querySelector('.upload-progress-bar').style.backgroundColor = 'var(--apple-red)';
+
+          let errMsg = '업로드 실패';
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (data && data.error) errMsg = `업로드 실패: ${data.error}`;
+            else if (data && data.description) errMsg = `업로드 실패: ${data.description}`;
+          } catch (_) {
+            if (xhr.status === 401) errMsg = '업로드 실패: 로그인이 필요합니다.';
+            else if (xhr.status === 403) errMsg = '업로드 실패: 관리자 권한이 필요하거나 세션이 만료되었습니다.';
+            else if (xhr.status === 413) errMsg = '업로드 실패: 파일 크기가 제한을 초과했습니다 (Cloudflare 터널 이용 시 최대 100MB).';
+            else if (xhr.status === 404) errMsg = '업로드 실패: 업로드 폴더가 없습니다.';
+            else if (xhr.status === 409) errMsg = '업로드 실패: 저장 공간이 부족하거나 쓰기 권한이 없습니다.';
+            else if (xhr.status === 507) errMsg = '업로드 실패: 스마트폰 저장 공간이 부족합니다.';
+            else errMsg = `업로드 실패 (HTTP ${xhr.status}). 로그인 및 저장 공간을 확인하세요.`;
+          }
+
+          showToast(errMsg, () => { uploadQueue.push({ file, folder }); pumpUploads(); });
+
+          if (xhr.status === 401 && typeof window.Pulse?.showLogin === 'function') {
+            window.Pulse.showLogin('세션이 만료되었습니다. 다시 로그인하세요.');
+          }
         }
       };
 

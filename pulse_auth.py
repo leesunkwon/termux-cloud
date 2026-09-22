@@ -26,7 +26,7 @@ def read_accounts():
 def configure_auth(app):
     config = read_accounts()
     app.secret_key = config['secret'] if config else secrets.token_hex(32)
-    app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
+    app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax',
                       SESSION_COOKIE_SECURE=os.environ.get('PULSE_HTTPS') == '1',
                       PERMANENT_SESSION_LIFETIME=timedelta(hours=12))
     attempts = {}
@@ -67,8 +67,17 @@ def configure_auth(app):
         if not config:
             return jsonify(success=False, error='서버에서 python3 setup-auth.py 실행 후 서버를 재시작하세요.'), 503
         origin = request.headers.get('Origin')
-        if origin and urlsplit(origin).netloc != request.host:
-            return jsonify(success=False, error='허용되지 않은 요청입니다.'), 403
+        if origin:
+            forwarded_host = request.headers.get('X-Forwarded-Host', '').split(',')[0].strip()
+            allowed_hosts = {request.host}
+            if forwarded_host:
+                allowed_hosts.add(forwarded_host)
+                if ':' in forwarded_host:
+                    allowed_hosts.add(forwarded_host.split(':')[0])
+            if ':' in request.host:
+                allowed_hosts.add(request.host.split(':')[0])
+            if urlsplit(origin).netloc not in allowed_hosts:
+                return jsonify(success=False, error='허용되지 않은 요청입니다.'), 403
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             return jsonify(success=False, error='올바른 로그인 요청이 필요합니다.'), 400
