@@ -499,3 +499,49 @@ body[data-role="viewer"] :is(#upload-btn, #btn-cloud-new-folder, #btn-zip-downlo
   .dock-item, .btn, .nav-tab-btn { animation: none !important; transition: none !important; }
   .pulse-dot { animation: none !important; }
 }
+
+/* Pulse OS 창 상태와 Finder 작업 표시 */
+.menubar-menus .menubar-item { border: 0; background: transparent; color: inherit; font: inherit; }
+.menubar-menus .menubar-item:hover { background: rgba(20, 34, 61, .08); }
+.finder-nav-item { display: block; width: 100%; border: 0; background: transparent; text-align: left; font-family: inherit; }
+.finder-nav-item.active { background: rgba(0, 113, 227, .12); }
+.menubar-item:focus-visible, .finder-nav-item:focus-visible, .dock-item:focus-visible, .desktop-file-icon:focus-visible { outline: 2px solid #0071e3; outline-offset: 2px; }
+.desktop-window.window-active:not(.window-dark) {
+  box-shadow: 0 24px 64px rgba(20, 34, 61, 0.32), 0 0 0 1px rgba(0, 110, 219, 0.38);
+}
+.desktop-window.window-active.window-dark { box-shadow: 0 22px 62px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(122, 162, 247, 0.65); }
+.window-traffic-lights { gap: 0; min-width: 0; }
+.traffic-light { width: 28px; height: 28px; display: grid; place-items: center; background: transparent; border: 0; border-radius: 7px; }
+.traffic-light.btn-close, .traffic-light.btn-min, .traffic-light.btn-max { background: transparent; border: 0; }
+.traffic-light::before { content: ''; display: block; width: 12px; height: 12px; border-radius: 50%; }
+.traffic-light.btn-close::before { background: #ff5f56; box-shadow: inset 0 0 0 1px #e0443e; }
+.traffic-light.btn-min::before { background: #ffbd2e; box-shadow: inset 0 0 0 1px #dea123; }
+.traffic-light.btn-max::before { background: #27c93f; box-shadow: inset 0 0 0 1px #1aab29; }
+.traffic-light:hover { background: rgba(20, 34, 61, 0.08); transform: none; }
+.traffic-light:focus-visible, .finder-pager button:focus-visible, .finder-error-state button:focus-visible { outline: 2px solid #0071e3; outline-offset: 2px; }
+#win-finder .window-statusbar { min-height: 36px; height: 36px; gap: 8px; }
+.finder-pager { display: flex; align-items: center; gap: 6px; white-space: nowrap; color: #39475e; font-weight: 600; }
+.finder-pager button { width: 30px; height: 30px; border: 1px solid #d9e1ec; border-radius: 8px; background: #fff; color: #1f4c85; font-size: 20px; line-height: 1; cursor: pointer; }
+.finder-pager button:disabled { opacity: .4; cursor: default; }
+.finder-error-state { grid-column: 1 / -1; justify-self: center; align-self: center; max-width: 380px; padding: 22px; border: 1px solid #f1c6c5; border-radius: 16px; background: #fff8f8; color: #7c2729; text-align: center; box-shadow: 0 8px 22px rgba(50, 30, 30, .07); }
+.finder-error-state p { margin: 0 0 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.finder-error-state button { min-height: 38px; padding: 0 16px; border: 0; border-radius: 9px; background: #a92d34; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.finder-error-state button:disabled { opacity: .55; cursor: wait; }
+.desktop-files-message { position: absolute; right: 18px; bottom: 90px; z-index: 12; display: flex; align-items: center; gap: 10px; max-width: min(420px, calc(100% - 36px)); padding: 9px 12px; border-radius: 12px; color: #fff; background: rgba(22, 35, 57, .82); box-shadow: 0 10px 28px rgba(16, 28, 46, .22); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); font-size: 12px; }
+.desktop-files-message span { overflow-wrap: anywhere; }
+.desktop-files-message button { flex: none; min-height: 32px; padding: 0 10px; border: 0; border-radius: 8px; background: #fff; color: #155bac; font: inherit; font-weight: 700; cursor: pointer; }
+.desktop-files-message button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.desktop-files-message button:disabled { opacity: .55; cursor: wait; }
+
+@media (max-width: 768px) {
+  .traffic-light { width: 36px; height: 36px; }
+  #view-desktop .dock-item { flex: 0 0 44px !important; width: 44px !important; min-width: 44px; height: 44px !important; }
+  #view-desktop .dock-icon { font-size: 21px !important; }
+  .desktop-dock-wrap.dock-overflow-right::after,
+  .desktop-dock-wrap.dock-overflow-left::before { position: absolute; top: -25px; padding: 3px 8px; border-radius: 7px; background: rgba(22, 35, 57, .8); color: #fff; font-size: 10px; font-weight: 700; pointer-events: none; }
+  .desktop-dock-wrap.dock-overflow-right::after { content: '앱 더 보기 ›'; right: 12px; }
+  .desktop-dock-wrap.dock-overflow-left::before { content: '‹ 이전 앱'; left: 12px; }
+  #win-finder .window-statusbar { min-height: 42px; height: 42px; }
+  .finder-pager button { width: 36px; height: 36px; }
+  .desktop-files-message { left: 12px; right: 12px; bottom: 82px; max-width: none; justify-content: space-between; }
+}
