@@ -2654,8 +2654,7 @@
     if (!desktopWorkspaceRestored || desktopWorkspaceRestoring || desktopWorkspaceResetPending ||
         localStorage.getItem('pulse_desktop_restore') === 'false') return;
     const old = readDesktopWorkspace();
-    const previous = new Map((old?.windows || [])
-      .filter(item => item && typeof item.app === 'string').map(item => [item.app, item]));
+    const previous = new Map((old?.windows || []).map(item => [item.app, item]));
     const mobile = window.innerWidth <= 768;
     const windows = Array.from(document.querySelectorAll('.desktop-window:not(.hidden)'))
       .map(win => {
@@ -2693,44 +2692,33 @@
     if (!saved) return;
     const canvas = document.getElementById('desktop-canvas');
     desktopWorkspaceRestoring = true;
-    try {
-      for (const item of saved.windows.slice(0, 20)) {
-        if (!item || typeof item.app !== 'string' || item.app === 'cam') continue;
-        const win = document.getElementById('win-' + item.app);
-        if (!win?.classList.contains('desktop-window') || (win.hasAttribute('data-admin') && !Pulse.isAdmin)) continue;
-        try {
-          openDesktopWindow(item.app);
-          if (window.innerWidth > 768 && canvas) {
-            const width = Math.min(Math.max(Number(item.width) || 320, 320), Math.max(320, canvas.clientWidth - 16));
-            const height = Math.min(Math.max(Number(item.height) || 220, 220), Math.max(220, canvas.clientHeight - 76));
-            const x = Number.isFinite(Number(item.x)) ? Number(item.x) : 0;
-            const y = Number.isFinite(Number(item.y)) ? Number(item.y) : 38;
-            win.style.width = `${width}px`;
-            win.style.height = `${height}px`;
-            win.style.left = `${Math.max(0, Math.min(x, canvas.clientWidth - width))}px`;
-            win.style.top = `${Math.max(38, Math.min(y, canvas.clientHeight - height - 76))}px`;
-          }
-          win.classList.toggle('window-maximized', !!item.maximized);
-          win.classList.toggle('window-minimized', !!item.minimized);
-        } catch (_) {
-          win.classList.add('hidden');
-          delete state.openWindows[item.app];
-          document.querySelectorAll('.dock-dot').forEach(dot => {
-            if (dot.dataset.appDot === item.app) dot.classList.add('hidden');
-          });
-        }
+    for (const item of saved.windows.slice(0, 20)) {
+      if (!item || typeof item.app !== 'string' || item.app === 'cam') continue;
+      const win = document.getElementById('win-' + item.app);
+      if (!win || (win.hasAttribute('data-admin') && !Pulse.isAdmin)) continue;
+      openDesktopWindow(item.app);
+      if (window.innerWidth > 768 && canvas) {
+        const width = Math.min(Math.max(Number(item.width) || 320, 320), Math.max(320, canvas.clientWidth - 16));
+        const height = Math.min(Math.max(Number(item.height) || 220, 220), Math.max(220, canvas.clientHeight - 76));
+        const x = Number.isFinite(Number(item.x)) ? Number(item.x) : 0;
+        const y = Number.isFinite(Number(item.y)) ? Number(item.y) : 38;
+        win.style.width = `${width}px`;
+        win.style.height = `${height}px`;
+        win.style.left = `${Math.max(0, Math.min(x, canvas.clientWidth - width))}px`;
+        win.style.top = `${Math.max(38, Math.min(y, canvas.clientHeight - height - 76))}px`;
       }
-      const active = saved.active;
-      const activeWin = document.getElementById('win-' + active);
-      if (activeWin && !activeWin.classList.contains('hidden') && !activeWin.classList.contains('window-minimized')) {
-        bringWindowToFront(active);
-      } else {
-        activateTopDesktopWindow();
-      }
-    } finally {
-      desktopWorkspaceRestoring = false;
-      syncDesktopWindowAccessibility();
+      win.classList.toggle('window-maximized', !!item.maximized);
+      win.classList.toggle('window-minimized', !!item.minimized);
     }
+    const active = saved.active;
+    const activeWin = document.getElementById('win-' + active);
+    if (activeWin && !activeWin.classList.contains('hidden') && !activeWin.classList.contains('window-minimized')) {
+      bringWindowToFront(active);
+    } else {
+      activateTopDesktopWindow();
+    }
+    desktopWorkspaceRestoring = false;
+    syncDesktopWindowAccessibility();
   }
 
   function setupDesktopWorkspaceSettings() {
@@ -2835,8 +2823,6 @@
     // Dock icons
     document.querySelectorAll('.dock-item').forEach(btn => {
       const appId = btn.getAttribute('data-app');
-      btn.setAttribute('aria-label', btn.title || `${appId} 열기`);
-      btn.setAttribute('aria-pressed', 'false');
       btn.addEventListener('click', () => {
         const win = document.getElementById('win-' + appId);
         if (!win) return;
@@ -2930,8 +2916,6 @@
     // Windows dragging and resizing
     document.querySelectorAll('.desktop-window').forEach(win => {
       const appId = win.getAttribute('data-app');
-      win.setAttribute('role', 'region');
-      win.setAttribute('aria-label', win.querySelector('.window-title')?.textContent.trim() || appId);
       win.addEventListener('mousedown', () => bringWindowToFront(appId));
       win.addEventListener('touchstart', () => bringWindowToFront(appId), { passive: true });
       makeWindowDraggable(win);
@@ -3019,7 +3003,7 @@
 
     // Trigger app initializations
     if (appId === 'terminal') {
-      if (!desktopWorkspaceRestoring) setTimeout(() => {
+      setTimeout(() => {
         const inp = document.getElementById('terminal-input');
         if (inp) inp.focus();
       }, 100);
@@ -3034,7 +3018,7 @@
       checkVncStatus();
     } else if (appId === 'stickies') {
       const ta = document.getElementById('sticky-textarea');
-      if (ta && !desktopWorkspaceRestoring) ta.focus();
+      if (ta) ta.focus();
     } else if (appId === 'music') {
       if (typeof loadMusicPlaylist === 'function') loadMusicPlaylist();
     } else if (appId === 'notes') {
@@ -3138,7 +3122,6 @@
       photos: 'Pulse Photos',
       clipboard: '클립보드',
       cam: 'Pulse Cam',
-      api: 'Pulse API Studio',
       settings: 'Pulse OS 설정',
       about: 'Pulse OS 정보'
     };
@@ -3151,10 +3134,6 @@
   function makeWindowDraggable(win) {
     const header = win.querySelector('.window-header');
     if (!header) return;
-    if (header.querySelector('.btn-max')) header.addEventListener('dblclick', e => {
-      if (e.target.closest('button')) return;
-      maximizeDesktopWindow(win.dataset.app);
-    });
 
     let isDragging = false;
     let startX = 0, startY = 0;
@@ -3312,11 +3291,8 @@
 
     const updateResize = (clientX, clientY) => {
       if (!isResizing) return;
-      const canvas = document.getElementById('desktop-canvas');
-      const maxW = Math.max(320, (canvas?.clientWidth || window.innerWidth) - win.offsetLeft - 8);
-      const maxH = Math.max(220, (canvas?.clientHeight || window.innerHeight) - win.offsetTop - 76);
-      const newW = Math.min(maxW, Math.max(320, startW + (clientX - startX)));
-      const newH = Math.min(maxH, Math.max(220, startH + (clientY - startY)));
+      const newW = Math.max(300, startW + (clientX - startX));
+      const newH = Math.max(200, startH + (clientY - startY));
       win.style.width = `${newW}px`;
       win.style.height = `${newH}px`;
     };
@@ -3623,18 +3599,15 @@
     // Filter sidebar (Finder only — do not change Pulse Cloud filters)
     document.querySelectorAll('.finder-nav-item').forEach(item => {
       item.addEventListener('click', () => {
-        const path = item.getAttribute('data-finder-path');
-        if (path !== null) {
-          state.finderFilter = 'all';
-          navigateFolder(path);
-        } else if (item.getAttribute('data-finder-view') === 'recents') {
+        document.querySelectorAll('.finder-nav-item').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+        if (item.getAttribute('data-finder-view') === 'recents') {
           state.finderView = 'recents';
-          renderFinderFiles();
         } else {
           state.finderView = 'browse';
           state.finderFilter = item.getAttribute('data-finder-filter') || 'all';
-          navigateFolder('');
         }
+        renderFinderFiles();
       });
     });
 
@@ -3715,15 +3688,6 @@
 
   function renderFinderFiles() {
     const grid = document.getElementById('finder-file-grid');
-    document.querySelectorAll('.finder-nav-item').forEach(item => {
-      const path = item.getAttribute('data-finder-path');
-      const active = state.finderView === 'recents' ? item.dataset.finderView === 'recents' :
-        path !== null ? state.finderFilter === 'all' && state.folder === path :
-        !state.folder && item.dataset.finderFilter === state.finderFilter;
-      item.classList.toggle('active', active);
-      if (active) item.setAttribute('aria-current', 'page');
-      else item.removeAttribute('aria-current');
-    });
     const status = document.getElementById('finder-status-text');
     if (!grid) return;
     grid.innerHTML = '';

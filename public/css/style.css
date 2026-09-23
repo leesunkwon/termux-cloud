@@ -3886,12 +3886,6 @@ body {
 }
 
 .finder-nav-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  border: 0;
-  background: transparent;
-  font-family: inherit;
   font-size: 12px;
   font-weight: 500;
   padding: 6px 8px;
@@ -3910,7 +3904,6 @@ body {
   color: var(--apple-blue);
   font-weight: 600;
 }
-.finder-nav-item:focus-visible { outline:2px solid #0071e3; outline-offset:-2px; }
 
 .finder-content {
   flex: 1;
