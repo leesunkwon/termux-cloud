@@ -428,7 +428,7 @@
           </button>
         </div>
       </aside>
-      <button class="sidebar-scrim" id="sidebar-scrim" type="button" aria-label="보관함 메뉴 닫기" hidden></button>
+      <button class="sidebar-scrim" id="sidebar-scrim" type="button" aria-label="보관함 메뉴 닫기" tabindex="-1" hidden></button>
 
       <!-- 메인 파일 브라우저 컨텐츠 -->
       <main class="main-content">
@@ -547,6 +547,13 @@
           <div class="loading-state hidden" id="loading-state">
             <div class="apple-spinner"></div>
             <p>파일 목록을 불러오는 중...</p>
+          </div>
+
+          <div class="file-error-state hidden" id="file-error-state" role="alert">
+            <div class="file-error-icon" aria-hidden="true">!</div>
+            <h3>파일 목록을 불러오지 못했습니다</h3>
+            <p id="file-error-message"></p>
+            <button class="btn btn-primary" id="file-retry-btn" type="button">다시 시도</button>
           </div>
 
           <!-- 빈 화면 상태 -->

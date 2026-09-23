@@ -13,6 +13,7 @@
     terminalBusy: false, editorDirty: false, editorBusy: false,
     currentAppView: 'portal', // 'portal' | 'cloud' | 'desktop' | 'dashboard'
     files: [],
+    fileLoadError: null,
     filteredFiles: [],
     currentFilter: 'all',
     searchQuery: '',
@@ -85,6 +86,9 @@
     fileListWrap: document.getElementById('file-list-wrap'),
     fileListBody: document.getElementById('file-list-body'),
     loadingState: document.getElementById('loading-state'),
+    fileErrorState: document.getElementById('file-error-state'),
+    fileErrorMessage: document.getElementById('file-error-message'),
+    fileRetryBtn: document.getElementById('file-retry-btn'),
     emptyState: document.getElementById('empty-state'),
     emptyTitle: document.getElementById('empty-title'),
     emptyDesc: document.getElementById('empty-desc'),
@@ -307,15 +311,37 @@
 
   function setSidebarOpen(open) {
     if (!el.sidebar) return;
-    const returnFocus = !open && el.sidebar.contains(document.activeElement);
-    el.sidebar.classList.toggle('open', open);
-    if (el.sidebarScrim) el.sidebarScrim.hidden = !open;
-    if (el.mobileMenuBtn) {
-      el.mobileMenuBtn.setAttribute('aria-expanded', String(open));
-      el.mobileMenuBtn.setAttribute('aria-label', open ? '보관함 메뉴 닫기' : '보관함 메뉴 열기');
+    const expanded = window.innerWidth <= 860 && open;
+    const wasOpen = el.sidebar.classList.contains('open');
+    el.sidebar.classList.toggle('open', expanded);
+    syncSidebarAccessibility();
+    if (expanded && !wasOpen) el.sidebar.querySelector('.nav-item.active')?.focus();
+  }
+
+  function syncSidebarAccessibility() {
+    if (!el.sidebar) return;
+    const mobile = window.innerWidth <= 860;
+    const expanded = mobile && el.sidebar.classList.contains('open');
+    [el.viewCloud?.querySelector('.main-content'), document.querySelector('.global-navbar'),
+      document.querySelector('.pulse-account-bar')].forEach(node => {
+      if (node) node.inert = expanded;
+    });
+    if (mobile && !expanded && el.sidebar.contains(document.activeElement)) el.mobileMenuBtn?.focus();
+    el.sidebar.inert = mobile && !expanded;
+    if (mobile && !expanded) el.sidebar.setAttribute('aria-hidden', 'true');
+    else el.sidebar.removeAttribute('aria-hidden');
+    if (expanded) {
+      el.sidebar.setAttribute('role', 'dialog');
+      el.sidebar.setAttribute('aria-modal', 'true');
+    } else {
+      el.sidebar.removeAttribute('role');
+      el.sidebar.removeAttribute('aria-modal');
     }
-    if (open) el.sidebar.querySelector('.nav-item.active')?.focus();
-    else if (returnFocus) el.mobileMenuBtn?.focus();
+    if (el.sidebarScrim) el.sidebarScrim.hidden = !expanded;
+    if (el.mobileMenuBtn) {
+      el.mobileMenuBtn.setAttribute('aria-expanded', String(expanded));
+      el.mobileMenuBtn.setAttribute('aria-label', expanded ? '보관함 메뉴 닫기' : '보관함 메뉴 열기');
+    }
   }
 
   function updatePortalSummaries() {
@@ -463,7 +489,9 @@
     el.sidebarScrim?.addEventListener('click', () => setSidebarOpen(false));
     window.addEventListener('resize', () => {
       if (window.innerWidth > 860) setSidebarOpen(false);
+      else syncSidebarAccessibility();
     });
+    el.fileRetryBtn?.addEventListener('click', () => fetchFiles());
 
     // View toggles (Grid / List)
     if (el.btnGridView) el.btnGridView.addEventListener('click', () => applyViewMode('grid'));
@@ -592,6 +620,22 @@
     // Keyboard navigation
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && el.sidebar.classList.contains('open')) setSidebarOpen(false);
+      if (e.key === 'Tab' && el.sidebar.classList.contains('open') && window.innerWidth <= 860 &&
+          !document.querySelector('dialog[open]')) {
+        const focusable = Array.from(el.sidebar.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+          .filter(node => node.getClientRects().length > 0);
+        if (focusable.length) {
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (e.shiftKey && (document.activeElement === first || !el.sidebar.contains(document.activeElement))) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && (document.activeElement === last || !el.sidebar.contains(document.activeElement))) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
       if (!el.previewModal.classList.contains('hidden')) {
         if (e.key === 'Escape') closePreview();
         if (e.key === 'ArrowLeft') showPrevPreview();
@@ -1255,11 +1299,13 @@
     const requestId = ++fileRequest;
     if (el.loadingState) el.loadingState.classList.remove('hidden');
     if (el.emptyState) el.emptyState.classList.add('hidden');
+    if (el.fileRetryBtn) el.fileRetryBtn.disabled = true;
     try {
       const query = new URLSearchParams({ path: state.folder, page: state.page, limit: 60,
         q: state.searchQuery, type: state.currentFilter, sort: state.sortBy });
       const data = await Pulse.api('/api/files?' + query);
       if (requestId !== fileRequest) return;
+      state.fileLoadError = null;
       state.files = data.files;
       state.total = data.total;
       state.page = data.page;
@@ -1274,6 +1320,7 @@
       if (typeof fetchDesktopFiles === 'function') fetchDesktopFiles();
     } catch (error) {
       if (requestId !== fileRequest) return;
+      state.fileLoadError = error.message || '서버 응답을 확인할 수 없습니다.';
       state.files = [];
       state.total = 0;
       state.pages = 1;
@@ -1281,9 +1328,11 @@
       render();
       renderFinderFiles();
       updateFileTools();
-      showToast(error.message, () => fetchFiles());
     } finally {
-      if (requestId === fileRequest) el.loadingState.classList.add('hidden');
+      if (requestId === fileRequest) {
+        el.loadingState.classList.add('hidden');
+        if (el.fileRetryBtn) el.fileRetryBtn.disabled = false;
+      }
     }
   }
 
@@ -1363,9 +1412,20 @@
     // 모든 파일을 순서대로 미리보기 리스트로 등록 (키보드 좌우 방향키로 연속 탐색 가능!)
     state.previewableList = list;
 
-    if (el.fileSummary) {
-      el.fileSummary.textContent = `${state.total}개 항목 · ${state.page}/${state.pages}페이지`;
+    if (el.fileSummary) el.fileSummary.textContent = state.fileLoadError
+      ? '목록 조회 실패' : `${state.total}개 항목 · ${state.page}/${state.pages}페이지`;
+
+    if (state.fileLoadError) {
+      el.fileGrid.innerHTML = '';
+      el.fileListBody.innerHTML = '';
+      el.fileGrid.classList.add('hidden');
+      el.fileListWrap.classList.add('hidden');
+      el.emptyState.classList.add('hidden');
+      el.fileErrorMessage.textContent = state.fileLoadError;
+      el.fileErrorState.classList.remove('hidden');
+      return;
     }
+    el.fileErrorState.classList.add('hidden');
 
     if (list.length === 0) {
       el.fileGrid.innerHTML = '';

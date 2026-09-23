@@ -21,7 +21,7 @@ from pulse_auth import read_accounts
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
-APP_VERSION = 'v2.7.0'
+APP_VERSION = 'v2.7.1'
 INSTANCE_ID = uuid.uuid4().hex
 SERVER_START_TIME = datetime.now()
 METRICS = Metrics()
