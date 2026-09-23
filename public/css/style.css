@@ -3394,6 +3394,10 @@ body {
 
 .menubar-item {
   padding: 3px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.15s;
@@ -3402,6 +3406,7 @@ body {
 .menubar-item:hover {
   background: rgba(0, 0, 0, 0.08);
 }
+.menubar-item:focus-visible, .menubar-icon-btn:focus-visible { outline:2px solid #0071e3; outline-offset:2px; }
 
 .menubar-status-item {
   display: flex;
@@ -3881,6 +3886,12 @@ body {
 }
 
 .finder-nav-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 500;
   padding: 6px 8px;
@@ -3899,6 +3910,7 @@ body {
   color: var(--apple-blue);
   font-weight: 600;
 }
+.finder-nav-item:focus-visible { outline:2px solid #0071e3; outline-offset:-2px; }
 
 .finder-content {
   flex: 1;
@@ -4773,6 +4785,27 @@ button:disabled {
 .terminal-status[data-busy="true"] { color:#ffd579; }
 .desktop-welcome { position:absolute; right:8%; top:16%; color:white; text-shadow:0 2px 16px #0007; pointer-events:none; }
 .desktop-welcome h2 { font-size:42px; margin-bottom:8px; }
+.desktop-welcome span { display:block; margin-top:14px; font-size:12px; font-weight:600; opacity:.8; }
+.desktop-files-status {
+  position:absolute; right:20px; bottom:94px; z-index:12;
+  display:flex; align-items:center; gap:10px; max-width:min(420px, calc(100% - 40px));
+  padding:8px 12px; border-radius:12px; color:#fff; font-size:12px;
+  background:rgba(25,30,47,.74); box-shadow:0 8px 24px #0004;
+  backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+}
+.desktop-files-status button { flex:none; border:0; border-radius:8px; padding:7px 10px; background:#fff; color:#165ab8; font:inherit; font-weight:700; cursor:pointer; }
+.desktop-files-status button:focus-visible, .desktop-workspace-reset:focus-visible { outline:3px solid #0071e3; outline-offset:2px; }
+.desktop-setting-toggle { display:flex; align-items:flex-start; gap:11px; padding:11px 12px; margin-top:8px; border:1px solid #e5e5ea; border-radius:12px; background:#fff; cursor:pointer; }
+.desktop-setting-toggle input { width:18px; height:18px; margin:1px 0 0; accent-color:#0071e3; flex:none; }
+.desktop-setting-toggle span { display:flex; flex-direction:column; gap:4px; }
+.desktop-setting-toggle strong { font-size:13px; color:#1d1d1f; }
+.desktop-setting-toggle small { font-size:11px; line-height:1.45; color:#64646b; }
+.desktop-workspace-reset { margin-top:10px; padding:8px 12px; border:1px solid #d2d2d7; border-radius:9px; background:#fff; color:#1d1d1f; font:inherit; font-size:12px; cursor:pointer; }
+@media (max-width:768px) {
+  #btn-desktop-show-desktop { display:none !important; }
+  .desktop-welcome span { display:none; }
+  .desktop-files-status { left:12px; right:12px; bottom:82px; max-width:none; justify-content:space-between; }
+}
 .shortcut-symbol svg, .dock-icon svg { width:30px; height:30px; display:block; }
 .win-title-icon svg { width:17px; height:17px; display:block; }
 .dock-item.active { background:#ffffff45; border-radius:14px; box-shadow:inset 0 0 0 1px #ffffff80; }
@@ -7658,5 +7691,3 @@ body.focus-mode-active .desktop-window.window-active {
     min-width: 100% !important;
   }
 }
-
-
