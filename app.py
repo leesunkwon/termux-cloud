@@ -12,6 +12,7 @@ import uuid
 import shlex
 import secrets
 import re
+import tempfile
 from pathlib import Path
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory, send_file, abort, g, session, Response
@@ -20,7 +21,7 @@ from pulse_auth import read_accounts
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
-APP_VERSION = 'v2.6.0'
+APP_VERSION = 'v2.6.1'
 INSTANCE_ID = uuid.uuid4().hex
 SERVER_START_TIME = datetime.now()
 METRICS = Metrics()
@@ -855,56 +856,41 @@ def save_custom_apis(apis):
     with open(CUSTOM_APIS_FILE, 'w', encoding='utf-8') as f:
         json.dump(apis, f, ensure_ascii=False, indent=2)
 
+PYTHON_API_SLOTS = threading.BoundedSemaphore(2)
+
 def execute_python_api(code_str, req_context, timeout_sec=3.0):
-    res_box = [None]
-    err_box = [None]
-
-    def _worker():
-        try:
-            local_scope = {}
-            safe_builtins = {
-                'abs': abs, 'all': all, 'any': any, 'bin': bin, 'bool': bool, 'chr': chr,
-                'dict': dict, 'dir': dir, 'divmod': divmod, 'enumerate': enumerate,
-                'filter': filter, 'float': float, 'format': format, 'frozenset': frozenset,
-                'getattr': getattr, 'hasattr': hasattr, 'hash': hash, 'hex': hex, 'id': id,
-                'int': int, 'isinstance': isinstance, 'issubclass': issubclass, 'iter': iter,
-                'len': len, 'list': list, 'map': map, 'max': max, 'min': min, 'next': next,
-                'oct': oct, 'ord': ord, 'pow': pow, 'print': print, 'range': range,
-                'reversed': reversed, 'round': round, 'set': set, 'slice': slice,
-                'sorted': sorted, 'str': str, 'sum': sum, 'tuple': tuple, 'type': type,
-                'zip': zip, 'None': None, 'True': True, 'False': False,
-                'Exception': Exception, 'ValueError': ValueError, 'KeyError': KeyError,
-                'TypeError': TypeError
-            }
-            global_scope = {
-                '__builtins__': safe_builtins,
-                'math': __import__('math'),
-                'json': __import__('json'),
-                're': __import__('re'),
-                'time': __import__('time'),
-                'datetime': __import__('datetime').datetime,
-                'random': __import__('random'),
-                'hashlib': __import__('hashlib')
-            }
-            exec(code_str, global_scope, local_scope)
-            handler = local_scope.get('handle') or local_scope.get('handler') or local_scope.get('main')
-            if callable(handler):
-                res_box[0] = handler(req_context)
-            elif 'result' in local_scope:
-                res_box[0] = local_scope['result']
-            else:
-                res_box[0] = {'output': '핸들러 함수(def handle(req):)를 정의하세요.'}
-        except Exception as e:
-            err_box[0] = e
-
-    t = threading.Thread(target=_worker, daemon=True)
-    t.start()
-    t.join(timeout=timeout_sec)
-    if t.is_alive():
-        return {'error': f'스크립트 실행 시간이 초과되었습니다 ({timeout_sec}초 초과).', 'code': 'TIMEOUT'}, 504
-    if err_box[0] is not None:
-        return {'error': f'Python 실행 오류: {str(err_box[0])}', 'code': 'SCRIPT_ERROR'}, 500
-    return res_box[0], 200
+    if not PYTHON_API_SLOTS.acquire(blocking=False):
+        return {'error': 'Python API 실행이 이미 진행 중입니다.', 'code': 'BUSY'}, 429
+    try:
+        payload = json.dumps({'code': code_str, 'context': req_context}, ensure_ascii=False).encode('utf-8')
+        worker_path = os.path.join(BASE_DIR, 'pulse_api_worker.py')
+        with tempfile.TemporaryFile(mode='w+b') as output:
+            process = subprocess.Popen(
+                [sys.executable, '-I', '-u', worker_path],
+                cwd=BASE_DIR, stdin=subprocess.PIPE, stdout=output,
+                stderr=subprocess.DEVNULL, start_new_session=True
+            )
+            try:
+                process.communicate(input=payload, timeout=timeout_sec)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except OSError:
+                    process.kill()
+                process.communicate()
+                return {'error': f'스크립트 실행 시간이 초과되었습니다 ({timeout_sec}초 초과).', 'code': 'TIMEOUT'}, 504
+            if process.returncode in (-signal.SIGXCPU, -signal.SIGKILL):
+                return {'error': '스크립트 실행 자원 제한을 초과했습니다.', 'code': 'TIMEOUT'}, 504
+            output.seek(0)
+            try:
+                response = json.loads(output.read(1024 * 1024 + 1))
+            except (ValueError, UnicodeDecodeError):
+                return {'error': 'Python 실행 프로세스가 올바른 응답을 반환하지 않았습니다.', 'code': 'SCRIPT_ERROR'}, 500
+        if not response.get('ok'):
+            return {'error': f"Python 실행 오류: {response.get('error', '알 수 없는 오류')}", 'code': 'SCRIPT_ERROR'}, 500
+        return response.get('result'), 200
+    finally:
+        PYTHON_API_SLOTS.release()
 
 @app.route('/api/custom-apis', methods=['GET'])
 def get_custom_apis():

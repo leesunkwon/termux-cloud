@@ -1,6 +1,7 @@
 """Confined file APIs. Hidden files and symlinks are never exposed."""
 import base64
 import hashlib
+import ipaddress
 import io
 import json
 import mimetypes
@@ -8,9 +9,11 @@ import os
 import secrets
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -34,16 +37,40 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
     app.extensions['pulse_file_lock'] = mutation
     thumb_lock = threading.Lock()
     text_limit = 2 * 1024 * 1024
+    zip_size_limit = 1024 * 1024 * 1024
+    zip_file_limit = 1000
+    share_request_lock = threading.Lock()
+    share_requests = {}
+
+    def load_json_dict(path):
+        try:
+            value = json.loads(path.read_text(encoding='utf-8'))
+        except FileNotFoundError:
+            return {}
+        except (ValueError, OSError):
+            abort(500, description='저장된 파일 정보가 손상되었거나 읽을 수 없습니다.')
+        if not isinstance(value, dict):
+            abort(500, description='저장된 파일 정보의 형식이 올바르지 않습니다.')
+        return value
+
+    def save_json_atomic(path, value):
+        path.parent.mkdir(mode=0o700, exist_ok=True)
+        temporary = path.with_name(f'.{path.name}.{uuid.uuid4().hex}.tmp')
+        try:
+            with temporary.open('x', encoding='utf-8') as stream:
+                os.chmod(temporary, 0o600)
+                json.dump(value, stream, ensure_ascii=False, indent=2)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def load_metadata():
-        try:
-            return json.loads(meta_file.read_text(encoding='utf-8'))
-        except (FileNotFoundError, ValueError, OSError):
-            return {}
+        return load_json_dict(meta_file)
 
     def save_metadata(d):
-        meta_file.parent.mkdir(mode=0o700, exist_ok=True)
-        meta_file.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding='utf-8')
+        save_json_atomic(meta_file, d)
 
     def get_file_meta(rel, all_metadata=None):
         if all_metadata is not None:
@@ -51,14 +78,65 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
         return load_metadata().get(rel, {})
 
     def load_shares():
-        try:
-            return json.loads(shares_file.read_text(encoding='utf-8'))
-        except (FileNotFoundError, ValueError, OSError):
-            return {}
+        return load_json_dict(shares_file)
 
     def save_shares(d):
-        shares_file.parent.mkdir(mode=0o700, exist_ok=True)
-        shares_file.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding='utf-8')
+        save_json_atomic(shares_file, d)
+
+    def remap_related_paths(source, destination):
+        """Called under mutation after a successful file or folder move."""
+        old = source.relative_to(root).as_posix()
+        new = destination.relative_to(root).as_posix()
+
+        def remap(path):
+            if path == old:
+                return new
+            if path.startswith(old + '/'):
+                return new + path[len(old):]
+            return path
+
+        metadata = load_metadata()
+        moved_metadata = {path: info for path, info in metadata.items()
+                          if path != old and not path.startswith(old + '/')}
+        moved_metadata.update({remap(path): info for path, info in metadata.items()
+                               if path == old or path.startswith(old + '/')})
+        shares = load_shares()
+        changed_shares = False
+        for share in shares.values():
+            old_path = share.get('path', '')
+            new_path = remap(old_path)
+            if new_path != old_path:
+                share['path'] = new_path
+                share['filename'] = Path(new_path).name
+                changed_shares = True
+        if moved_metadata != metadata:
+            save_metadata(moved_metadata)
+        if changed_shares:
+            save_shares(shares)
+
+    def limit_share_requests(kind):
+        client = request.remote_addr or 'unknown'
+        if client in ('127.0.0.1', '::1'):
+            forwarded = request.headers.get('CF-Connecting-IP', '')
+            try:
+                if forwarded:
+                    client = str(ipaddress.ip_address(forwarded))
+            except ValueError:
+                pass
+        key = (client, kind)
+        now = time.monotonic()
+        maximum = 30 if kind == 'download' else 120
+        with share_request_lock:
+            if len(share_requests) > 1024:
+                for stale_key, timestamps in list(share_requests.items()):
+                    if not timestamps or now - timestamps[-1] >= 60:
+                        del share_requests[stale_key]
+            timestamps = share_requests.setdefault(key, deque())
+            while timestamps and now - timestamps[0] >= 60:
+                timestamps.popleft()
+            if len(timestamps) >= maximum:
+                abort(429, description='공유 링크 요청이 너무 많습니다. 잠시 후 다시 시도하세요.')
+            timestamps.append(now)
 
     def path_for(relative='', allow_root=False):
         if not isinstance(relative, str) or '\x00' in relative or '\\' in relative:
@@ -296,6 +374,7 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
             if dst.exists() or not dst.parent.is_dir() or src in dst.parents:
                 abort(409, description='대상 이름이 이미 있거나 이동할 수 없는 폴더입니다.')
             src.rename(dst)
+            remap_related_paths(src, dst)
         return jsonify(success=True)
 
     @app.delete('/api/files/<path:filename>')
@@ -389,6 +468,7 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
             if dst.exists():
                 abort(409, description='같은 이름이 있습니다.')
             src.rename(dst)
+            remap_related_paths(src, dst)
         return jsonify(success=True, path=dst.relative_to(root).as_posix())
 
     @app.post('/api/batch/delete')
@@ -436,6 +516,7 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
                 if dst.exists() or src == dest_dir or (src.is_dir() and src in dest_dir.parents):
                     abort(409, description='대상 이름이 이미 있거나 이동할 수 없는 폴더입니다.')
                 src.rename(dst)
+                remap_related_paths(src, dst)
         return jsonify(success=True)
 
     # ── Pulse Photos API ──────────────────────────────────────────────────────
@@ -489,29 +570,44 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
 
     @app.post('/api/zip-download')
     def zip_download():
-        """선택한 파일/폴더 경로 배열을 즉시 ZIP으로 묶어 스트리밍 반환."""
+        """선택한 파일/폴더를 디스크 임시 파일에 압축하여 반환."""
         paths = data().get('paths', [])
         if not isinstance(paths, list) or not paths or len(paths) > 200:
             abort(400, description='다운로드할 파일을 선택하세요.')
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
-            for rel in paths:
-                try:
-                    p = path_for(rel)
-                except Exception:
+        selected = []
+        seen = set()
+        total_size = 0
+        for rel in paths:
+            p = path_for(rel)
+            candidates = [p] if p.is_file() else p.rglob('*') if p.is_dir() else []
+            for child in candidates:
+                if not child.is_file() or child.is_symlink() or any(
+                        part.startswith('.') for part in child.relative_to(root).parts):
                     continue
-                if p.is_file():
-                    zf.write(p, p.name)
-                elif p.is_dir():
-                    for child in p.rglob('*'):
-                        if child.is_file() and not child.is_symlink() and not any(
-                                part.startswith('.') for part in child.relative_to(root).parts):
-                            arc_name = child.relative_to(p.parent).as_posix()
-                            zf.write(child, arc_name)
-        buf.seek(0)
-        download_name = 'Pulse-선택파일.zip' if len(paths) > 1 else (Path(paths[0]).stem + '.zip')
-        return send_file(buf, mimetype='application/zip',
-                         as_attachment=True, download_name=download_name)
+                relative = child.relative_to(root).as_posix()
+                if relative in seen:
+                    continue
+                seen.add(relative)
+                total_size += child.stat().st_size
+                if len(selected) >= zip_file_limit or total_size > zip_size_limit:
+                    abort(413, description='ZIP 다운로드는 파일 1000개와 원본 합계 1GB 이하만 지원합니다.')
+                selected.append((child, relative))
+        if shutil.disk_usage(root).free < total_size + 16 * 1024 * 1024:
+            abort(507, description='ZIP 임시 파일을 만들 저장 공간이 부족합니다.')
+        temporary = tempfile.TemporaryFile(mode='w+b', dir=root)
+        try:
+            with zipfile.ZipFile(temporary, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+                for child, relative in selected:
+                    zf.write(child, relative)
+            temporary.seek(0)
+            download_name = 'Pulse-선택파일.zip' if len(paths) > 1 else (Path(paths[0]).stem + '.zip')
+            response = send_file(temporary, mimetype='application/zip',
+                                 as_attachment=True, download_name=download_name)
+            response.call_on_close(temporary.close)
+            return response
+        except Exception:
+            temporary.close()
+            raise
 
     # ── ZIP Unzip API ─────────────────────────────────────────────────────────
 
@@ -524,29 +620,68 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
         if not p.is_file() or p.suffix.lower() != '.zip':
             abort(400, description='.zip 파일만 압축 해제할 수 있습니다.')
         dest_dir = p.parent
-        extracted = []
         with mutation:
             try:
                 with zipfile.ZipFile(p, 'r') as zf:
-                    # 경로 순회 공격 방지: '..' 포함 항목 차단
-                    safe_members = []
+                    members = []
+                    file_paths = set()
+                    directories = set()
+                    total_size = 0
                     for member in zf.infolist():
-                        member_path = Path(member.filename)
-                        if '..' in member_path.parts or member_path.is_absolute():
-                            continue
-                        safe_members.append(member)
-                    for member in safe_members:
-                        target = dest_dir / member.filename
-                        # 저장소 밖 탈출 방지
-                        try:
-                            target.resolve().relative_to(root.resolve())
-                        except ValueError:
-                            continue
-                        zf.extract(member, dest_dir)
-                        extracted.append(member.filename)
-            except zipfile.BadZipFile:
+                        relative = Path(member.filename)
+                        if (not relative.parts or relative.is_absolute() or '\\' in member.filename
+                                or any(part.startswith('.') for part in relative.parts)):
+                            abort(400, description='ZIP에 허용되지 않는 경로가 있습니다.')
+                        target = path_for((dest_dir.relative_to(root) / relative).as_posix())
+                        if len(members) >= zip_file_limit:
+                            abort(413, description='ZIP 압축 해제는 항목 1000개 이하만 지원합니다.')
+                        if member.is_dir():
+                            directories.add(target)
+                        else:
+                            if target in file_paths:
+                                abort(400, description='ZIP에 중복 파일 경로가 있습니다.')
+                            file_paths.add(target)
+                            total_size += member.file_size
+                            if total_size > zip_size_limit:
+                                abort(413, description='ZIP 압축 해제는 총 1GB 이하만 지원합니다.')
+                        directories.update(parent for parent in target.parents if parent != root and root in parent.parents)
+                        members.append((member, target))
+                    if file_paths & directories:
+                        abort(400, description='ZIP의 파일과 폴더 경로가 충돌합니다.')
+                    if any(target.exists() for target in file_paths):
+                        abort(409, description='같은 이름의 파일이 있어 압축을 풀 수 없습니다.')
+                    if any(target.exists() and not target.is_dir() for target in directories):
+                        abort(409, description='같은 이름의 파일이 있어 압축을 풀 수 없습니다.')
+                    if shutil.disk_usage(dest_dir).free < total_size + 16 * 1024 * 1024:
+                        abort(507, description='압축을 풀 저장 공간이 부족합니다.')
+
+                    created_dirs = []
+                    created_files = []
+                    written_total = 0
+                    try:
+                        for directory in sorted(directories, key=lambda path: len(path.parts)):
+                            if not directory.exists():
+                                directory.mkdir()
+                                created_dirs.append(directory)
+                        for member, target in members:
+                            if member.is_dir():
+                                continue
+                            with zf.open(member) as source, target.open('xb') as output:
+                                created_files.append(target)
+                                while chunk := source.read(1024 * 1024):
+                                    written_total += len(chunk)
+                                    if written_total > zip_size_limit:
+                                        abort(413, description='압축 해제 용량 제한을 초과했습니다.')
+                                    output.write(chunk)
+                    except Exception:
+                        for created in reversed(created_files):
+                            created.unlink(missing_ok=True)
+                        for created in sorted(created_dirs, key=lambda path: len(path.parts), reverse=True):
+                            created.rmdir()
+                        raise
+            except (zipfile.BadZipFile, RuntimeError):
                 abort(400, description='손상된 ZIP 파일입니다.')
-        return jsonify(success=True, extracted=len(extracted),
+        return jsonify(success=True, extracted=len(members),
                        folder=dest_dir.relative_to(root).as_posix())
 
     # ── Favorites & Tags API ──────────────────────────────────────────────────
@@ -557,14 +692,16 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
         body = data()
         rel = body.get('path', '')
         p = path_for(rel)
-        all_meta = load_metadata()
-        file_meta = all_meta.get(rel, {})
-        new_fav = body.get('favorite')
-        if new_fav is None:
-            new_fav = not file_meta.get('favorite', False)
-        file_meta['favorite'] = bool(new_fav)
-        all_meta[rel] = file_meta
         with mutation:
+            if not p.exists():
+                abort(404, description='항목이 없습니다.')
+            all_meta = load_metadata()
+            file_meta = all_meta.get(rel, {})
+            new_fav = body.get('favorite')
+            if new_fav is None:
+                new_fav = not file_meta.get('favorite', False)
+            file_meta['favorite'] = bool(new_fav)
+            all_meta[rel] = file_meta
             save_metadata(all_meta)
         return jsonify(success=True, path=rel, favorite=file_meta['favorite'])
 
@@ -576,28 +713,30 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
         p = path_for(rel)
         action = body.get('action', 'toggle')
         tag = (body.get('tag') or '').strip().lower()
-        all_meta = load_metadata()
-        file_meta = all_meta.get(rel, {})
-        current_tags = list(file_meta.get('tags', []))
-
-        if action == 'set':
-            new_tags = [t.strip().lower() for t in body.get('tags', []) if isinstance(t, str) and t.strip()]
-            current_tags = list(dict.fromkeys(new_tags))[:10]
-        elif action == 'add':
-            if tag and tag not in current_tags and len(current_tags) < 10:
-                current_tags.append(tag)
-        elif action == 'remove':
-            if tag in current_tags:
-                current_tags.remove(tag)
-        elif action == 'toggle':
-            if tag in current_tags:
-                current_tags.remove(tag)
-            elif tag and len(current_tags) < 10:
-                current_tags.append(tag)
-
-        file_meta['tags'] = current_tags
-        all_meta[rel] = file_meta
         with mutation:
+            if not p.exists():
+                abort(404, description='항목이 없습니다.')
+            all_meta = load_metadata()
+            file_meta = all_meta.get(rel, {})
+            current_tags = list(file_meta.get('tags', []))
+
+            if action == 'set':
+                new_tags = [t.strip().lower() for t in body.get('tags', []) if isinstance(t, str) and t.strip()]
+                current_tags = list(dict.fromkeys(new_tags))[:10]
+            elif action == 'add':
+                if tag and tag not in current_tags and len(current_tags) < 10:
+                    current_tags.append(tag)
+            elif action == 'remove':
+                if tag in current_tags:
+                    current_tags.remove(tag)
+            elif action == 'toggle':
+                if tag in current_tags:
+                    current_tags.remove(tag)
+                elif tag and len(current_tags) < 10:
+                    current_tags.append(tag)
+
+            file_meta['tags'] = current_tags
+            all_meta[rel] = file_meta
             save_metadata(all_meta)
         return jsonify(success=True, path=rel, tags=current_tags)
 
@@ -621,24 +760,33 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
         p = path_for(rel)
         if not p.is_file():
             abort(404, description='공유할 파일을 찾을 수 없습니다.')
-        expire_hours = int(body.get('expireHours', 24))
-        max_downloads = int(body.get('maxDownloads', 0))
+        try:
+            expire_hours = int(body.get('expireHours', 24))
+            max_downloads = int(body.get('maxDownloads', 0))
+        except (TypeError, ValueError):
+            abort(400, description='공유 기한과 다운로드 횟수를 확인하세요.')
+        if expire_hours < 0 or expire_hours > 24 * 365 or max_downloads < 0:
+            abort(400, description='공유 기한과 다운로드 횟수를 확인하세요.')
 
-        share_id = secrets.token_hex(4)
+        share_id = secrets.token_hex(16)
         created_at = int(time.time())
         expires_at = (created_at + expire_hours * 3600) if expire_hours > 0 else None
 
-        shares = load_shares()
-        shares[share_id] = {
-            'id': share_id,
-            'path': rel,
-            'filename': p.name,
-            'created': created_at,
-            'expires': expires_at,
-            'maxDownloads': max_downloads if max_downloads > 0 else None,
-            'downloads': 0
-        }
         with mutation:
+            if not p.is_file():
+                abort(404, description='공유할 파일을 찾을 수 없습니다.')
+            shares = load_shares()
+            while share_id in shares:
+                share_id = secrets.token_hex(16)
+            shares[share_id] = {
+                'id': share_id,
+                'path': rel,
+                'filename': p.name,
+                'created': created_at,
+                'expires': expires_at,
+                'maxDownloads': max_downloads if max_downloads > 0 else None,
+                'downloads': 0
+            }
             save_shares(shares)
 
         expires_str = datetime.fromtimestamp(expires_at).strftime('%Y-%m-%d %H:%M') if expires_at else '무제한'
@@ -673,10 +821,10 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
     @app.delete('/api/shares/<share_id>')
     def revoke_share(share_id):
         """공유 링크 즉각 삭제/만료."""
-        shares = load_shares()
-        if share_id in shares:
-            del shares[share_id]
-            with mutation:
+        with mutation:
+            shares = load_shares()
+            if share_id in shares:
+                del shares[share_id]
                 save_shares(shares)
         return jsonify(success=True)
 
@@ -686,6 +834,7 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
     @app.get('/s/<share_id>')
     def public_share_page(share_id):
         """인증 없이 누구나 열어볼 수 있는 Apple HIG 스타일 공개 파일 다운로드 웹페이지."""
+        limit_share_requests('page')
         shares = load_shares()
         s = shares.get(share_id)
         now = time.time()
@@ -850,22 +999,21 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
     @app.get('/s/<share_id>/download')
     def public_share_download(share_id):
         """공유 파일 실제 다운로드 스트림 및 카운트 누적."""
-        shares = load_shares()
-        s = shares.get(share_id)
-        now = time.time()
-        if not s:
-            abort(404, description='유효하지 않은 공유 링크입니다.')
-        if s.get('expires') and now > s['expires']:
-            abort(410, description='만료된 공유 링크입니다.')
-        if s.get('maxDownloads') and s.get('downloads', 0) >= s['maxDownloads']:
-            abort(410, description='다운로드 가능 횟수가 만료되었습니다.')
-        p = path_for(s['path'])
-        if not p.is_file():
-            abort(404, description='파일이 없습니다.')
-
+        limit_share_requests('download')
         with mutation:
+            shares = load_shares()
+            s = shares.get(share_id)
+            now = time.time()
+            if not s:
+                abort(404, description='유효하지 않은 공유 링크입니다.')
+            if s.get('expires') and now > s['expires']:
+                abort(410, description='만료된 공유 링크입니다.')
+            if s.get('maxDownloads') and s.get('downloads', 0) >= s['maxDownloads']:
+                abort(410, description='다운로드 가능 횟수가 만료되었습니다.')
+            p = path_for(s['path'])
+            if not p.is_file():
+                abort(404, description='파일이 없습니다.')
             s['downloads'] = s.get('downloads', 0) + 1
-            shares[share_id] = s
             save_shares(shares)
 
         return send_file(p, as_attachment=True, download_name=s.get('filename', p.name))
@@ -1003,4 +1151,3 @@ def register_files(app, storage_dir, get_type, is_text, format_size):
             file=file_entry,
             message='스냅샷을 성공적으로 Camera 폴더에 저장했습니다.'
         )
-
