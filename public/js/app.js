@@ -41,6 +41,8 @@
     finderFilter: 'all',
     finderView: 'browse',
     desktopFiles: [],
+    desktopFilesTotal: 0,
+    desktopFilesLoadError: null,
   };
 
   // DOM Elements
@@ -2118,8 +2120,10 @@
     setupDesktopEnvironment();
     updateDesktopClock();
     updateMenubarIndicators();
-
-
+    requestAnimationFrame(() => {
+      updateDockScrollHint();
+      document.querySelectorAll('.desktop-window:not(.hidden):not(.window-maximized)').forEach(fitDesktopWindow);
+    });
   }
 
   function updateDesktopClock() {
@@ -2660,13 +2664,15 @@
     // Dock icons
     document.querySelectorAll('.dock-item').forEach(btn => {
       const appId = btn.getAttribute('data-app');
+      btn.setAttribute('aria-label', btn.title || `${appId} 열기`);
+      btn.setAttribute('aria-pressed', 'false');
       btn.addEventListener('click', () => {
         const win = document.getElementById('win-' + appId);
         if (!win) return;
         if (win.classList.contains('hidden')) {
           openDesktopWindow(appId);
         } else if (win.classList.contains('window-minimized')) {
-          win.classList.remove('window-minimized');
+          win.classList.remove('window-minimized', 'window-minimizing');
           bringWindowToFront(appId);
         } else if (state.activeDesktopApp === appId) {
           // If already front, toggle minimize
@@ -2744,6 +2750,23 @@
       makeWindowDraggable(win);
       makeWindowResizable(win);
     });
+    updateDesktopWindowState();
+    window.addEventListener('resize', () => {
+      updateDesktopWindowState();
+      document.querySelectorAll('.desktop-window:not(.hidden):not(.window-maximized)').forEach(fitDesktopWindow);
+    });
+  }
+
+  function fitDesktopWindow(win) {
+    if (window.innerWidth <= 768 || win.dataset.snapped || win.classList.contains('window-maximized')) return;
+    const canvas = document.getElementById('desktop-canvas');
+    if (!canvas || !canvas.clientWidth || !canvas.clientHeight) return;
+    const width = Math.min(win.offsetWidth, Math.max(320, canvas.clientWidth - 16));
+    const height = Math.min(win.offsetHeight, Math.max(220, canvas.clientHeight - 76));
+    win.style.width = `${width}px`;
+    win.style.height = `${height}px`;
+    win.style.left = `${Math.max(0, Math.min(win.offsetLeft, canvas.clientWidth - width - 8))}px`;
+    win.style.top = `${Math.max(38, Math.min(win.offsetTop, canvas.clientHeight - height - 76))}px`;
   }
 
   function openDesktopWindow(appId) {
@@ -2751,7 +2774,7 @@
     const win = document.getElementById('win-' + appId);
     if (!win) return;
     win.classList.remove('hidden');
-    win.classList.remove('window-minimized');
+    win.classList.remove('window-minimized', 'window-minimizing');
     bringWindowToFront(appId);
 
     // Update Dock Dot
@@ -2797,6 +2820,8 @@
       win.dataset.positioned = 'true';
     }
 
+    fitDesktopWindow(win);
+
     state.openWindows[appId] = true;
 
     // Trigger app initializations
@@ -2806,7 +2831,8 @@
         if (inp) inp.focus();
       }, 100);
     } else if (appId === 'finder') {
-      renderFinderFiles();
+      if (state.currentFilter !== 'all' || state.searchQuery) navigateFolder(state.folder);
+      else renderFinderFiles();
     } else if (appId === 'editor') {
       editorStats();
       if (typeof updateEditorHighlight === 'function') updateEditorHighlight();
@@ -2859,34 +2885,28 @@
     }
     const win = document.getElementById('win-' + appId);
     if (!win) return;
+    const focusWasInside = win.contains(document.activeElement);
     win.classList.add('hidden');
     win.classList.remove('window-maximized');
-    win.classList.remove('window-minimized');
+    win.classList.remove('window-minimized', 'window-minimizing');
     delete state.openWindows[appId];
 
     const dot = document.querySelector(`.dock-dot[data-app-dot="${appId}"]`);
     if (dot) dot.classList.add('hidden');
 
-    document.querySelector(`.dock-item[data-app="${appId}"]`)?.classList.remove('active');
-    const remaining = Object.keys(state.openWindows).filter(id => !document.getElementById('win-' + id).classList.contains('window-minimized'));
-    if (remaining.length > 0) {
-      bringWindowToFront(remaining[remaining.length - 1]);
-    } else {
-      const titleEl = document.getElementById('desktop-active-app-name');
-      if (titleEl) titleEl.textContent = 'Pulse OS';
-    }
+    updateDesktopWindowState();
+    if (focusWasInside) document.querySelector(`.dock-item[data-app="${appId}"]`)?.focus({ preventScroll: true });
   }
 
   function minimizeDesktopWindow(appId) {
     const win = document.getElementById('win-' + appId);
-    if (!win) return;
-    win.classList.add('window-minimizing');
+    if (!win || win.classList.contains('hidden') || win.classList.contains('window-minimized')) return;
+    const focusWasInside = win.contains(document.activeElement);
+    win.classList.add('window-minimizing', 'window-minimized');
+    updateDesktopWindowState();
+    if (focusWasInside) document.querySelector(`.dock-item[data-app="${appId}"]`)?.focus({ preventScroll: true });
     setTimeout(() => {
       win.classList.remove('window-minimizing');
-      win.classList.add('window-minimized');
-      document.querySelectorAll('.dock-item').forEach(item => item.classList.remove('active'));
-      const title = document.getElementById('desktop-active-app-name');
-      if (title) title.textContent = 'Pulse OS';
     }, 220);
   }
 
@@ -2901,8 +2921,34 @@
     if (!win) return;
     state.topZIndex++;
     win.style.zIndex = state.topZIndex;
+    updateDesktopWindowState(appId);
+    if (window.innerWidth <= 768 && state.currentAppView === 'desktop') {
+      const dock = document.getElementById('desktop-dock');
+      const icon = Array.from(dock?.querySelectorAll('.dock-item') || []).find(item => item.dataset.app === appId);
+      if (dock && icon) {
+        const dockBox = dock.getBoundingClientRect();
+        const iconBox = icon.getBoundingClientRect();
+        if (iconBox.left < dockBox.left || iconBox.right > dockBox.right) {
+          dock.scrollTo({ left: dock.scrollLeft + iconBox.left - dockBox.left - 12, behavior: 'smooth' });
+        }
+      }
+    }
+  }
+
+  function updateDesktopWindowState(preferredAppId) {
+    const visible = Array.from(document.querySelectorAll('.desktop-window:not(.hidden):not(.window-minimized)'));
+    const preferred = visible.find(win => win.dataset.app === preferredAppId) ||
+      visible.find(win => win.dataset.app === state.activeDesktopApp);
+    const active = preferred || visible.sort((a, b) => (Number(b.style.zIndex) || 0) - (Number(a.style.zIndex) || 0))[0];
+    const appId = active?.dataset.app || null;
     state.activeDesktopApp = appId;
-    document.querySelectorAll('.desktop-window').forEach(item => item.classList.toggle('mobile-background', item !== win));
+    document.querySelectorAll('.desktop-window').forEach(item => {
+      const background = item !== active;
+      item.classList.toggle('mobile-background', background);
+      item.classList.toggle('window-active', !background);
+      item.inert = item.classList.contains('hidden') || item.classList.contains('window-minimized') ||
+        (window.innerWidth <= 768 && background);
+    });
     document.querySelectorAll('.dock-item').forEach(item => {
       item.classList.toggle('active', item.dataset.app === appId);
       item.setAttribute('aria-pressed', String(item.dataset.app === appId));
@@ -2923,6 +2969,7 @@
       photos: 'Pulse Photos',
       clipboard: '클립보드',
       cam: 'Pulse Cam',
+      api: 'Pulse API Studio',
       settings: 'Pulse OS 설정',
       about: 'Pulse OS 정보'
     };
@@ -3341,6 +3388,19 @@
     const newFileBtn = document.getElementById('btn-finder-new-file');
     const newFolderBtn = document.getElementById('btn-finder-new-folder');
     const refreshBtn = document.getElementById('btn-finder-refresh');
+    const previousPage = document.getElementById('finder-page-prev');
+    const nextPage = document.getElementById('finder-page-next');
+
+    const changePage = direction => {
+      const next = Math.max(1, Math.min(state.pages, state.page + direction));
+      if (next === state.page) return;
+      state.page = next;
+      if (previousPage) previousPage.disabled = true;
+      if (nextPage) nextPage.disabled = true;
+      fetchFiles();
+    };
+    previousPage?.addEventListener('click', () => changePage(-1));
+    nextPage?.addEventListener('click', () => changePage(1));
 
     if (refreshBtn) {
       refreshBtn.addEventListener('click', () => {
@@ -3486,12 +3546,45 @@
   function renderFinderFiles() {
     const grid = document.getElementById('finder-file-grid');
     const status = document.getElementById('finder-status-text');
+    const pager = document.getElementById('finder-pager');
+    const previousPage = document.getElementById('finder-page-prev');
+    const nextPage = document.getElementById('finder-page-next');
+    const pageLabel = document.getElementById('finder-page-label');
     if (!grid) return;
     grid.innerHTML = '';
     renderFinderPath();
 
     const recentsMode = state.finderView === 'recents';
     const filter = state.finderFilter || 'all';
+    document.querySelectorAll('.finder-nav-item').forEach(item => {
+      const active = recentsMode ? item.dataset.finderView === 'recents' :
+        item.dataset.finderView !== 'recents' && item.dataset.finderFilter === filter;
+      item.classList.toggle('active', active);
+      item.setAttribute('aria-pressed', String(active));
+    });
+    const loadError = !recentsMode && state.fileLoadError;
+    if (pager) pager.classList.toggle('hidden', recentsMode || !!loadError || state.pages <= 1);
+    if (previousPage) previousPage.disabled = state.page <= 1;
+    if (nextPage) nextPage.disabled = state.page >= state.pages;
+    if (pageLabel) pageLabel.textContent = `${state.page} / ${state.pages}`;
+    if (loadError) {
+      if (status) status.textContent = '파일 목록을 불러오지 못했습니다.';
+      const error = document.createElement('div');
+      error.className = 'finder-error-state';
+      error.setAttribute('role', 'alert');
+      const message = document.createElement('p');
+      message.textContent = `파일 조회 실패: ${loadError}`;
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.textContent = '다시 시도';
+      retry.addEventListener('click', () => {
+        retry.disabled = true;
+        fetchFiles();
+      });
+      error.append(message, retry);
+      grid.appendChild(error);
+      return;
+    }
     const list = recentsMode
       ? loadRecents()
       : (filter === 'all' ? (state.files || []) : (state.files || []).filter(f => f.type === filter));
@@ -3499,7 +3592,7 @@
     if (status) {
       status.textContent = recentsMode
         ? `최근 항목 ${list.length}개`
-        : (filter === 'all' ? `${state.total}개 항목 · ${state.page}/${state.pages}페이지` : `${list.length}개 표시 중`);
+        : (filter === 'all' ? `${state.total}개 항목 · ${state.page}/${state.pages}페이지` : `현재 페이지에서 ${list.length}개 표시 중`);
     }
 
     if (list.length === 0) {
@@ -3508,7 +3601,7 @@
       if (recentsMode) {
         empty.textContent = '최근에 연 파일이 없습니다.';
       } else if (filter !== 'all') {
-        empty.textContent = '이 종류에 해당하는 항목이 없습니다.';
+        empty.textContent = '현재 페이지에 이 종류의 항목이 없습니다. 다른 페이지도 확인해 보세요.';
       } else if (state.folder) {
         empty.textContent = '이 폴더가 비어 있습니다. 상단의 새 폴더나 새 파일 버튼을 이용해 보세요.';
       } else {
@@ -4813,14 +4906,20 @@
     return '📎';
   }
 
+  let desktopFilesRequest = 0;
   async function fetchDesktopFiles() {
+    const requestId = ++desktopFilesRequest;
     try {
       const data = await Pulse.api('/api/files?' + new URLSearchParams({
         path: 'Desktop', page: 1, limit: 100, type: 'all', q: '', sort: 'name-asc'
       }));
+      if (requestId !== desktopFilesRequest) return;
       state.desktopFiles = data.files || [];
-    } catch (_) {
-      state.desktopFiles = [];
+      state.desktopFilesTotal = data.total || 0;
+      state.desktopFilesLoadError = null;
+    } catch (error) {
+      if (requestId !== desktopFilesRequest) return;
+      state.desktopFilesLoadError = error.message || '서버 응답을 확인할 수 없습니다.';
     }
     renderDesktopFiles();
   }
@@ -4828,6 +4927,31 @@
   function renderDesktopFiles() {
     const grid = document.getElementById('desktop-files-grid');
     if (!grid) return;
+    const message = document.getElementById('desktop-files-message');
+    if (message) {
+      const failed = Boolean(state.desktopFilesLoadError);
+      const more = state.desktopFilesTotal > state.desktopFiles.length;
+      message.replaceChildren();
+      message.classList.toggle('hidden', !failed && !more);
+      if (failed || more) {
+        const label = document.createElement('span');
+        label.textContent = failed ? `바탕화면 파일 조회 실패: ${state.desktopFilesLoadError}${state.desktopFiles.length ? ' · 이전 목록 표시 중' : ''}` :
+          `${state.desktopFiles.length}개 표시 중 · 전체 ${state.desktopFilesTotal}개`;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = failed ? '다시 시도' : 'Finder에서 모두 보기';
+        button.addEventListener('click', () => {
+          if (failed) {
+            button.disabled = true;
+            fetchDesktopFiles();
+          } else {
+            openDesktopWindow('finder');
+            navigateFolder('Desktop');
+          }
+        });
+        message.append(label, button);
+      }
+    }
     grid.innerHTML = '';
     (state.desktopFiles || []).forEach(file => {
       const elIcon = document.createElement('div');
@@ -5431,9 +5555,21 @@
   }
 
   // 8. Dock Magnification (호버 확대)
+  function updateDockScrollHint() {
+    const dock = document.getElementById('desktop-dock');
+    if (!dock) return;
+    dock.parentElement?.classList.toggle('dock-overflow-right',
+      window.innerWidth <= 768 && dock.scrollLeft + dock.clientWidth < dock.scrollWidth - 6);
+    dock.parentElement?.classList.toggle('dock-overflow-left',
+      window.innerWidth <= 768 && dock.scrollLeft > 6);
+  }
+
   function setupDockMagnificationAndMotion() {
     const dock = document.getElementById('desktop-dock');
     if (!dock) return;
+    dock.addEventListener('scroll', updateDockScrollHint, { passive: true });
+    window.addEventListener('resize', updateDockScrollHint);
+    requestAnimationFrame(updateDockScrollHint);
 
     dock.addEventListener('mousemove', (e) => {
       if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
