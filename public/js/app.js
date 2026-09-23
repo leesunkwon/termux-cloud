@@ -107,6 +107,7 @@
 
     // Sidebar
     sidebar: document.getElementById('sidebar'),
+    sidebarScrim: document.getElementById('sidebar-scrim'),
     mobileMenuBtn: document.getElementById('mobile-menu-btn'),
     navItems: document.querySelectorAll('.nav-item'),
     countAll: document.getElementById('count-all'),
@@ -275,10 +276,15 @@
     state.currentAppView = viewName;
     window.location.hash = viewName;
     requestAnimationFrame(() => Pulse.viewport());
+    setSidebarOpen(false);
 
     // Update Nav Tab Buttons
     [el.tabPortal, el.tabCloud, el.tabDesktop, el.tabDashboard].forEach(btn => {
-      if (btn) btn.classList.toggle('active', btn.getAttribute('data-view') === viewName);
+      if (!btn) return;
+      const active = btn.getAttribute('data-view') === viewName;
+      btn.classList.toggle('active', active);
+      if (active) btn.setAttribute('aria-current', 'page');
+      else btn.removeAttribute('aria-current');
     });
 
     // Toggle View Sections
@@ -297,6 +303,19 @@
     } else if (viewName === 'portal') {
       updatePortalSummaries();
     }
+  }
+
+  function setSidebarOpen(open) {
+    if (!el.sidebar) return;
+    const returnFocus = !open && el.sidebar.contains(document.activeElement);
+    el.sidebar.classList.toggle('open', open);
+    if (el.sidebarScrim) el.sidebarScrim.hidden = !open;
+    if (el.mobileMenuBtn) {
+      el.mobileMenuBtn.setAttribute('aria-expanded', String(open));
+      el.mobileMenuBtn.setAttribute('aria-label', open ? '보관함 메뉴 닫기' : '보관함 메뉴 열기');
+    }
+    if (open) el.sidebar.querySelector('.nav-item.active')?.focus();
+    else if (returnFocus) el.mobileMenuBtn?.focus();
   }
 
   function updatePortalSummaries() {
@@ -345,6 +364,14 @@
         openDesktopWindow('api');
       });
     }
+    [el.portalCardCloud, el.portalCardDesktop, el.portalCardDashboard, el.portalCardApi].forEach(card => {
+      card?.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          card.click();
+        }
+      });
+    });
     if (el.portalChangelogBtn) {
       el.portalChangelogBtn.addEventListener('click', openChangelogModal);
     }
@@ -407,25 +434,36 @@
 
     // Sidebar items
     el.navItems.forEach(btn => {
+      btn.setAttribute('aria-pressed', String(btn.classList.contains('active')));
       btn.addEventListener('click', () => {
-        el.navItems.forEach(b => b.classList.remove('active'));
+        el.navItems.forEach(b => {
+          b.classList.remove('active');
+          b.setAttribute('aria-pressed', 'false');
+        });
+        document.querySelectorAll('.sidebar-tag-chips .tag-chip').forEach(chip => {
+          chip.classList.remove('active');
+          chip.setAttribute('aria-pressed', 'false');
+        });
         btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
         state.currentFilter = btn.getAttribute('data-filter');
         updateTitle();
         state.page = 1;
         fetchFiles();
 
         if (window.innerWidth <= 860) {
-          el.sidebar.classList.remove('open');
+          setSidebarOpen(false);
         }
       });
     });
 
     if (el.mobileMenuBtn) {
-      el.mobileMenuBtn.addEventListener('click', () => {
-        el.sidebar.classList.toggle('open');
-      });
+      el.mobileMenuBtn.addEventListener('click', () => setSidebarOpen(!el.sidebar.classList.contains('open')));
     }
+    el.sidebarScrim?.addEventListener('click', () => setSidebarOpen(false));
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 860) setSidebarOpen(false);
+    });
 
     // View toggles (Grid / List)
     if (el.btnGridView) el.btnGridView.addEventListener('click', () => applyViewMode('grid'));
@@ -553,6 +591,7 @@
 
     // Keyboard navigation
     document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && el.sidebar.classList.contains('open')) setSidebarOpen(false);
       if (!el.previewModal.classList.contains('hidden')) {
         if (e.key === 'Escape') closePreview();
         if (e.key === 'ArrowLeft') showPrevPreview();
@@ -919,7 +958,13 @@
     if (state.currentFilter !== 'all') {
       state.currentFilter = 'all';
       el.navItems.forEach(b => {
-        b.classList.toggle('active', b.getAttribute('data-filter') === 'all');
+        const active = b.getAttribute('data-filter') === 'all';
+        b.classList.toggle('active', active);
+        b.setAttribute('aria-pressed', String(active));
+      });
+      document.querySelectorAll('.sidebar-tag-chips .tag-chip').forEach(chip => {
+        chip.classList.remove('active');
+        chip.setAttribute('aria-pressed', 'false');
       });
       updateTitle();
     }
@@ -1334,10 +1379,14 @@
       } else if (state.folder) {
         const folderName = state.folder.split('/').pop() || state.folder;
         el.emptyTitle.textContent = `'${folderName}' 폴더가 비어 있습니다`;
-        el.emptyDesc.textContent = "상단의 '업로드' 또는 '새 폴더' 버튼을 눌러 파일을 추가하세요.";
+        el.emptyDesc.textContent = document.body.dataset.role === 'admin'
+          ? "상단의 '업로드' 또는 '새 폴더' 버튼을 눌러 파일을 추가하세요."
+          : '관리자가 파일을 추가하면 이곳에 표시됩니다.';
       } else {
         el.emptyTitle.textContent = '파일이 없습니다';
-        el.emptyDesc.textContent = '상단의 업로드 버튼을 누르거나 파일을 드롭하세요.';
+        el.emptyDesc.textContent = document.body.dataset.role === 'admin'
+          ? '상단의 업로드 버튼을 누르거나 파일을 드롭하세요.'
+          : '관리자가 파일을 추가하면 이곳에 표시됩니다.';
       }
       return;
     }
@@ -1360,6 +1409,9 @@
       const isFolder = file.type === 'folder';
       card.className = isFolder ? 'file-card file-card-folder' : 'file-card';
       card.setAttribute('data-index', index);
+      card.tabIndex = 0;
+      card.setAttribute('role', 'button');
+      card.setAttribute('aria-label', `${file.name} ${isFolder ? '폴더 열기' : '미리보기'}`);
 
       let thumbContent = '';
       if (isFolder) {
@@ -1472,6 +1524,12 @@
           openPreview(index);
         }
       });
+      card.addEventListener('keydown', (event) => {
+        if (event.target !== card || (event.key !== 'Enter' && event.key !== ' ')) return;
+        event.preventDefault();
+        if (isFolder) navigateFolder(file.path);
+        else openPreview(index);
+      });
 
       if (isFolder) {
         card.addEventListener('dragover', (e) => {
@@ -1510,6 +1568,8 @@
       const tr = document.createElement('tr');
       const isFolder = file.type === 'folder';
       tr.className = isFolder ? 'file-row file-row-folder' : 'file-row';
+      tr.tabIndex = 0;
+      tr.setAttribute('aria-label', `${file.name} ${isFolder ? '폴더 열기' : '미리보기'}`);
       const tagDots = (file.tags || []).map(t => `<span class="file-tag-dot tag-${escapeHtml(t)}"></span>`).join('');
 
       tr.innerHTML = `
@@ -1596,6 +1656,12 @@
           openPreview(index);
         }
       });
+      tr.addEventListener('keydown', (event) => {
+        if (event.target !== tr || (event.key !== 'Enter' && event.key !== ' ')) return;
+        event.preventDefault();
+        if (isFolder) navigateFolder(file.path);
+        else openPreview(index);
+      });
       addSelection(tr.querySelector('td'), file, true);
       el.fileListBody.appendChild(tr);
     });
@@ -1607,6 +1673,8 @@
 
     if (el.btnGridView) el.btnGridView.classList.toggle('active', mode === 'grid');
     if (el.btnListView) el.btnListView.classList.toggle('active', mode === 'list');
+    if (el.btnGridView) el.btnGridView.setAttribute('aria-pressed', String(mode === 'grid'));
+    if (el.btnListView) el.btnListView.setAttribute('aria-pressed', String(mode === 'list'));
 
     if (el.fileGrid) el.fileGrid.classList.toggle('hidden', mode !== 'grid');
     if (el.fileListWrap) el.fileListWrap.classList.toggle('hidden', mode !== 'list');
@@ -2507,13 +2575,26 @@
     // Desktop shortcut icons
     document.querySelectorAll('.desktop-shortcut').forEach(sc => {
       const appId = sc.getAttribute('data-app');
+      sc.setAttribute('role', 'button');
+      sc.setAttribute('aria-label', sc.title || `${appId} 열기`);
       sc.addEventListener('click', () => {
         if (window.innerWidth <= 768) openDesktopWindow(appId);
       });
       sc.addEventListener('dblclick', () => openDesktopWindow(appId));
       sc.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') openDesktopWindow(appId);
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          openDesktopWindow(appId);
+        }
       });
+    });
+
+    document.querySelectorAll('.window-header .traffic-light').forEach(button => {
+      const action = button.classList.contains('btn-close') ? '닫기'
+        : button.classList.contains('btn-min') ? '최소화' : '최대화';
+      button.setAttribute('aria-label', action);
+      if (!button.title) button.title = action;
     });
 
     // Dock icons
@@ -5941,19 +6022,31 @@
         e.stopPropagation();
         const filter = chip.dataset.filter;
         const wasActive = chip.classList.contains('active');
-        document.querySelectorAll('.sidebar-tag-chips .tag-chip').forEach(c => c.classList.remove('active'));
-        document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+        document.querySelectorAll('.sidebar-tag-chips .tag-chip').forEach(c => {
+          c.classList.remove('active');
+          c.setAttribute('aria-pressed', 'false');
+        });
+        el.navItems.forEach(item => {
+          item.classList.remove('active');
+          item.setAttribute('aria-pressed', 'false');
+        });
 
         if (wasActive) {
           state.currentFilter = 'all';
           const allBtn = document.querySelector('.nav-item[data-filter="all"]');
-          if (allBtn) allBtn.classList.add('active');
+          if (allBtn) {
+            allBtn.classList.add('active');
+            allBtn.setAttribute('aria-pressed', 'true');
+          }
         } else {
           chip.classList.add('active');
+          chip.setAttribute('aria-pressed', 'true');
           state.currentFilter = filter;
         }
         state.page = 1;
+        updateTitle();
         fetchFiles();
+        if (window.innerWidth <= 860) setSidebarOpen(false);
       });
     });
   }
@@ -7415,4 +7508,3 @@
   // Start app
   document.addEventListener('DOMContentLoaded', init);
 })();
-
